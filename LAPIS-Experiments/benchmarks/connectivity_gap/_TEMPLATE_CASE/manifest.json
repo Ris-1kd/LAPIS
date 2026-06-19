@@ -1,0 +1,33 @@
+{
+  "case_id": "replace-with-case-id",
+  "cve": "CVE-YYYY-NNNNN",
+  "project": "replace-with-project",
+  "gap_type": "connectivity_gap",
+  "repair_branch": "ccec",
+  "source_dir": "source",
+  "poc_dir": "poc",
+  "rule_file": "rules/final-sink-only.json",
+  "entrypoint": {
+    "file": "poc/replace_with_driver.py",
+    "function": "replace_with_entrypoint"
+  },
+  "source": {
+    "file": "poc/replace_with_driver.py",
+    "line": 0,
+    "symbol": "replace_with_source_symbol"
+  },
+  "sink": {
+    "file": "source/replace_with_sink_file.py",
+    "line": 0,
+    "callee": "replace_with_sink_callee",
+    "argument": "replace_with_sink_argument"
+  },
+  "expected": {
+    "baseline_finding": 0,
+    "repaired_finding_min": 1
+  },
+  "notes": [
+    "Connectivity gap benchmarks should require CCEC call-edge repair."
+  ]
+}
+

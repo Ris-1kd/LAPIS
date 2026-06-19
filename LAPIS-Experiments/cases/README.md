@@ -1,6 +1,12 @@
 # LAPIS CVE Case Dataset
 
-本目录按断链类型组织 CVE case 数据集。
+本目录按断链类型组织 LAPIS case 元数据和实验产物。
+
+原始输入数据集不要放在这里。源码、PoC 和 YASA rule 应放在：
+
+```text
+../benchmarks/<gap_type>/<case_id>/
+```
 
 ```text
 connectivity_gap/
@@ -42,4 +48,26 @@ ccec/
 ctpc/
 validation/
 repaired-runs/
+```
+
+## 与 benchmarks/ 的关系
+
+```text
+benchmarks/
+  source/  被分析项目源码
+  poc/     安全 PoC / driver
+  rules/   YASA rule config
+
+cases/
+  case.json 引用 benchmark 路径
+  evidence/ccec/ctpc/validation/repaired-runs 保存 LAPIS 产物
+```
+
+推荐 `case.json` 中使用相对路径指向 benchmark：
+
+```json
+{
+  "dataset_dir": "../../benchmarks/mixed_case/cve-2026-24486-python-multipart/source",
+  "rule_file": "../../benchmarks/mixed_case/cve-2026-24486-python-multipart/rules/final-sink-only.json"
+}
 ```

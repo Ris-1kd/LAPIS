@@ -5,8 +5,15 @@ LAPIS-Experiments stores reproducible assets for evaluating LAPIS-Core.
 ## Layout
 
 ```text
+benchmarks/
+  Raw analyzer inputs grouped by the three repair classes:
+    connectivity_gap/
+    propagation_gap/
+    mixed_case/
+  Each benchmark case contains source/, poc/, rules/, manifest.json, README.md.
+
 cases/
-  CVE case datasets grouped by gap type:
+  LAPIS case metadata and generated experiment artifacts grouped by gap type:
     connectivity_gap/
     propagation_gap/
     mixed_case/
@@ -42,3 +49,27 @@ mixed_case:
 control:
   CVE-2023-4033 / MLflow
 ```
+
+## Benchmarks vs Cases
+
+```text
+benchmarks/
+  Inputs uploaded by dataset maintainers:
+    source/   analyzed project source
+    poc/      safe PoC / driver
+    rules/    YASA rule config
+
+cases/
+  LAPIS experiment metadata and outputs:
+    case.json
+    evidence/
+    ccec/
+    ctpc/
+    llm/
+    validation/
+    repaired-runs/
+```
+
+When adding a new CVE dataset, upload raw files to `benchmarks/<gap_type>/<case_id>/`
+first. Then create or update `cases/<gap_type>/<case_id>/case.json` to point to
+that benchmark input.
