@@ -297,6 +297,9 @@ async function initAnalyzer(dir: any, args: any[] = [], printf?: any) {
     .option('--lapisCtpcFile <file>', 'LAPIS CTPC JSON file for guarded access-path propagation', (file: any) => {
       Config.lapisCtpcFile = path.isAbsolute(file) ? file : path.resolve(path.join(process.cwd(), file))
     })
+    .option('--lapisCcecFile <file>', 'LAPIS CCEC JSON file for repaired callgraph edges', (file: any) => {
+      Config.lapisCcecFile = path.isAbsolute(file) ? file : path.resolve(path.join(process.cwd(), file))
+    })
     .option('--workerCount <count>', '指定Worker数量（0表示自动计算，>0表示使用设置的值）', (count: any) => {
       const workerCount = parseInt(count, 10)
       if (Number.isNaN(workerCount) || workerCount < 0) {

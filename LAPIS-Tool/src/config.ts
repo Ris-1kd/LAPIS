@@ -57,6 +57,7 @@ export interface IConfig {
   cgAlgo: string
   taintTraceOutputStrategy?: string
   lapisCtpcFile?: string
+  lapisCcecFile?: string
 
   // Allow additional properties
   [key: string]: any
@@ -137,6 +138,7 @@ const configObject: IConfig = {
   // Taint trace output strategy: 'full' | 'callstack-only' (legacy alias: 'folded')
   taintTraceOutputStrategy: 'callstack-only',
   lapisCtpcFile: '',
+  lapisCcecFile: '',
 
   // CallGraph
   cgAlgo: 'DEFAULT',

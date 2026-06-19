@@ -32,6 +32,9 @@ def _build_yasa_command(
     uast_sdk_path: Path,
     timeout_seconds: int,
     ctpc_file: Path | None = None,
+    ccec_file: Path | None = None,
+    checker_ids: str = "taint_flow_python_input_inner",
+    dump_cg: bool = False,
 ) -> list[str]:
     command = [
         "timeout",
@@ -48,7 +51,7 @@ def _build_yasa_command(
         "--ruleConfigFile",
         str(rule_file),
         "--checkerIds",
-        "taint_flow_python_input_inner",
+        checker_ids,
         "--entrypointMode",
         "ONLY_CUSTOM",
         "--workerCount",
@@ -62,6 +65,10 @@ def _build_yasa_command(
     ]
     if ctpc_file is not None:
         command.extend(["--lapisCtpcFile", str(ctpc_file)])
+    if ccec_file is not None:
+        command.extend(["--lapisCcecFile", str(ccec_file)])
+    if dump_cg:
+        command.append("--dumpCG")
     return command
 
 
@@ -85,6 +92,7 @@ def run_yasa_validation(
     label: str,
     timeout_seconds: int = 180,
     ctpc_file: Path | None = None,
+    ccec_file: Path | None = None,
 ) -> dict[str, Any]:
     """Run YASA on every validation sample and compare with expected results."""
 
@@ -95,6 +103,8 @@ def run_yasa_validation(
     uast_sdk_path = uast_sdk_path.resolve()
     if ctpc_file is not None:
         ctpc_file = ctpc_file.resolve()
+    if ccec_file is not None:
+        ccec_file = ccec_file.resolve()
 
     if not tool_dir.exists():
         raise FileNotFoundError(tool_dir)
@@ -118,7 +128,16 @@ def run_yasa_validation(
         if report_dir.exists():
             shutil.rmtree(report_dir)
         report_dir.mkdir(parents=True, exist_ok=True)
-        command = _build_yasa_command(tool_dir, sample_dir, report_dir, rule_file, uast_sdk_path, timeout_seconds, ctpc_file)
+        command = _build_yasa_command(
+            tool_dir,
+            sample_dir,
+            report_dir,
+            rule_file,
+            uast_sdk_path,
+            timeout_seconds,
+            ctpc_file,
+            ccec_file,
+        )
         run = _run_command(command, tool_dir)
         summary_file = _summary_path(report_dir)
         summary: dict[str, Any] | None = None
@@ -149,6 +168,7 @@ def run_yasa_validation(
         "rules_dir": str(rules_dir),
         "uast_sdk_path": str(uast_sdk_path),
         "ctpc_file": str(ctpc_file) if ctpc_file else None,
+        "ccec_file": str(ccec_file) if ccec_file else None,
         "status": status,
         "sample_results": sample_results,
         "feedback": _feedback(sample_results),
@@ -170,6 +190,9 @@ def run_yasa_case(
     label: str,
     timeout_seconds: int = 180,
     ctpc_file: Path | None = None,
+    ccec_file: Path | None = None,
+    checker_ids: str = "taint_flow_python_input_inner",
+    dump_cg: bool = False,
 ) -> dict[str, Any]:
     """Run YASA on the original CVE case dataset rather than local validation samples."""
 
@@ -183,6 +206,8 @@ def run_yasa_case(
     uast_sdk_path = uast_sdk_path.resolve()
     if ctpc_file is not None:
         ctpc_file = ctpc_file.resolve()
+    if ccec_file is not None:
+        ccec_file = ccec_file.resolve()
 
     if not tool_dir.exists():
         raise FileNotFoundError(tool_dir)
@@ -197,7 +222,18 @@ def run_yasa_case(
     if report_dir.exists():
         shutil.rmtree(report_dir)
     report_dir.mkdir(parents=True, exist_ok=True)
-    command = _build_yasa_command(tool_dir, source_path, report_dir, rule_file, uast_sdk_path, timeout_seconds, ctpc_file)
+    command = _build_yasa_command(
+        tool_dir,
+        source_path,
+        report_dir,
+        rule_file,
+        uast_sdk_path,
+        timeout_seconds,
+        ctpc_file,
+        ccec_file,
+        checker_ids,
+        dump_cg,
+    )
     run = _run_command(command, tool_dir)
 
     summary_file = _summary_path(report_dir)
@@ -218,6 +254,9 @@ def run_yasa_case(
         "rule_file": str(rule_file),
         "uast_sdk_path": str(uast_sdk_path),
         "ctpc_file": str(ctpc_file) if ctpc_file else None,
+        "ccec_file": str(ccec_file) if ccec_file else None,
+        "checker_ids": checker_ids,
+        "dump_cg": dump_cg,
         "status": "reported" if run["returncode"] == 0 and predicted == "finding" else "not_reported",
         "result": predicted,
         "returncode": run["returncode"],

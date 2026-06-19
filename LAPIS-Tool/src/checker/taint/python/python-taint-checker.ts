@@ -13,6 +13,7 @@ const Config = require('../../../config')
 const { extractRelativePath } = require('../../../util/file-util')
 const logger = require('../../../util/logger')(__filename)
 const { loadPythonDefaultRule } = require('./python-taint-abstract-checker')
+const LapisCcec = require('./lapis-ccec')
 const LapisCtpc = require('./lapis-ctpc')
 
 const TAINT_TAG_NAME_PYTHON = 'PYTHON_INPUT'
@@ -39,6 +40,7 @@ class PythonTaintChecker extends PythonTaintAbstractChecker {
    * @param info
    */
   triggerAtStartOfAnalyze(analyzer: any, scope: any, node: any, state: any, info: any) {
+    LapisCcec.reset()
     LapisCtpc.resetFacts()
     const moduleManager = analyzer.topScope.context.modules
     const fileManager = analyzer.topScope.context.files

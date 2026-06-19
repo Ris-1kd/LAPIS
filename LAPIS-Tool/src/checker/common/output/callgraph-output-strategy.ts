@@ -2,6 +2,7 @@ import type { IResultManager } from '../../../engine/analyzer/common/result-mana
 import type { IConfig } from '../../../config'
 
 const path = require('path')
+const fs = require('fs')
 const OutputStrategy = require('../../../engine/analyzer/common/output-strategy')
 const logger = require('../../../util/logger')(__filename)
 const { createWriteStream } = require('fs')
@@ -18,6 +19,56 @@ class CallgraphOutputStrategy extends OutputStrategy {
   constructor() {
     super()
     this.outputFilePath = 'callgraph.json'
+  }
+
+  private injectLapisCcecEdges(cgContent: { nodes: Record<string, any>; edges: Record<string, any> }, config: IConfig): void {
+    const ccecFile = config.lapisCcecFile
+    if (!ccecFile || !fs.existsSync(ccecFile)) {
+      return
+    }
+    let ccec: any
+    try {
+      ccec = JSON.parse(fs.readFileSync(ccecFile, 'utf8'))
+    } catch (err) {
+      logger.warn(`failed to load LAPIS CCEC file ${ccecFile}: ${err}`)
+      return
+    }
+    const candidateEdges = Array.isArray(ccec?.candidate_edges) ? ccec.candidate_edges : []
+    for (const edge of candidateEdges) {
+      if (!edge?.caller || !edge?.callee) {
+        continue
+      }
+      const sourceNodeId = `LAPIS_CCEC::${edge.caller}`
+      const targetNodeId = `LAPIS_CCEC::${edge.callee}`
+      const edgeId = `${sourceNodeId}->${targetNodeId}`
+      if (!cgContent.nodes[sourceNodeId]) {
+        cgContent.nodes[sourceNodeId] = {
+          id: sourceNodeId,
+          fullName: edge.caller,
+          funcDef: '',
+          lapisCcec: true,
+        }
+      }
+      if (!cgContent.nodes[targetNodeId]) {
+        cgContent.nodes[targetNodeId] = {
+          id: targetNodeId,
+          fullName: edge.callee,
+          funcDef: '',
+          lapisCcec: true,
+        }
+      }
+      cgContent.edges[edgeId] = {
+        id: edgeId,
+        sourceNodeId,
+        targetNodeId,
+        callSite: edge.callsite || '',
+        lapisCcec: true,
+        edgeId: edge.edge_id || '',
+        confidence: edge.confidence || 0,
+        guards: edge.guards || [],
+        evidence: edge.evidence || [],
+      }
+    }
   }
 
   /**
@@ -133,6 +184,7 @@ class CallgraphOutputStrategy extends OutputStrategy {
             const cgContent = callgraph[0].dumpGraph(astManager, symbolTable)
 
             if (cgContent) {
+              this.injectLapisCcecEdges(cgContent, config)
               const cgFilePath = path.join(config.reportDir, outputFilePath)
               logger.info(`start dump CG to ${cgFilePath}`)
               this.writeCgContentToStream(cgContent, cgFilePath)

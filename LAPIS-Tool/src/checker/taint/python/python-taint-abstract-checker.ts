@@ -14,9 +14,33 @@ const TaintChecker = require('../taint-checker')
 const TaintOutputStrategy = require('../../common/output/taint-output-strategy')
 const QidUnifyUtil = require('../../../util/qid-unify-util')
 const FileUtil = require('../../../util/file-util')
+const LapisCcec = require('./lapis-ccec')
 const LapisCtpc = require('./lapis-ctpc')
 
 const TAINT_TAG_NAME_PYTHON = 'PYTHON_INPUT'
+
+function buildSyntheticCcecArg(node: any, traces: any[]): any {
+  const taint = {
+    isTaintedRec: true,
+    addTag: (_tag: string) => undefined,
+    containsTag: (_tag: string) => true,
+    hasTraces: () => true,
+    getFirstTrace: () => traces,
+    setAllTraces: (_traces: any[]) => undefined,
+  }
+  return {
+    ...node,
+    taint,
+  }
+}
+
+function ccecRuleName(decision: any): string {
+  let ruleName = decision?.finalSink || 'LAPIS_CCEC_VIRTUAL_SINK'
+  if (decision?.sinkAttribute) {
+    ruleName += `\nSINK Attribute: ${decision.sinkAttribute}`
+  }
+  return ruleName
+}
 
 /**
  *
@@ -31,6 +55,7 @@ class PythonTaintAbstractChecker extends TaintChecker {
    * @param info
    */
   triggerAtStartOfAnalyze(analyzer: any, scope: any, node: any, state: any, info: any) {
+    LapisCcec.reset()
     LapisCtpc.resetFacts()
   }
 
@@ -47,6 +72,7 @@ class PythonTaintAbstractChecker extends TaintChecker {
     if (result !== undefined) {
       info.res = result
     }
+    LapisCtpc.recordIdentifier(analyzer, scope, node, state, info)
   }
 
   /**
@@ -112,8 +138,33 @@ class PythonTaintAbstractChecker extends TaintChecker {
     const { fclos, callInfo } = info
     const funcCallArgTaintSource = this.checkerRuleConfigContent.sources?.FuncCallArgTaintSource
     IntroduceTaint.introduceFuncArgTaintByRuleConfig(fclos?.object, node, callInfo, funcCallArgTaintSource)
+    LapisCtpc.recordFunctionCall(analyzer, scope, node, state, info)
+    this.checkCcecBoundary(node, fclos, state)
     this.checkByNameMatch(node, fclos, callInfo, state)
     this.checkByFieldMatch(node, fclos, callInfo, state)
+  }
+
+  checkCcecBoundary(node: any, fclos: any, state?: any) {
+    const decision = LapisCcec.evaluatePythonBoundary(node)
+    if (!decision.enabled || decision.action !== 'force' || !decision.virtualSink || !Array.isArray(decision.traces)) {
+      return false
+    }
+    const syntheticArg = buildSyntheticCcecArg(node, decision.traces)
+    const taintFlowFinding = this.buildTaintFinding(
+      this.getCheckerId(),
+      this.desc,
+      node,
+      syntheticArg,
+      fclos,
+      TAINT_TAG_NAME_PYTHON,
+      ccecRuleName(decision),
+      [],
+      state?.callstack,
+      state?.callsites
+    )
+    if (!TaintOutputStrategy.isNewFinding(this.resultManager, taintFlowFinding)) return true
+    this.resultManager.newFinding(taintFlowFinding, TaintOutputStrategy.outputStrategyId)
+    return true
   }
 
   /**
@@ -243,12 +294,64 @@ class PythonTaintAbstractChecker extends TaintChecker {
    */
   findArgsAndAddNewFinding(node: any, callInfo: CallInfo | undefined, fclos: any, rule: any, state?: any) {
     const args = BasicRuleHandler.prepareArgs(callInfo, fclos, rule)
+    const ccecDecision = LapisCcec.evaluatePythonSink(node, rule)
     const ctpcDecision = LapisCtpc.evaluatePythonSink(node, rule)
+    if (ccecDecision.enabled && ccecDecision.action === 'suppress') {
+      return false
+    }
     if (ctpcDecision.enabled && ctpcDecision.action === 'suppress') {
       return false
     }
+    const effectiveArgs =
+      ccecDecision.enabled &&
+      ccecDecision.action === 'force' &&
+      ccecDecision.virtualSink &&
+      args.length === 0 &&
+      Array.isArray(ccecDecision.traces)
+        ? [buildSyntheticCcecArg(node, ccecDecision.traces)]
+        : args
+    if (
+      ccecDecision.enabled &&
+      ccecDecision.action === 'force' &&
+      ccecDecision.virtualSink &&
+      args.length === 0 &&
+      effectiveArgs.length > 0
+    ) {
+      let ruleName = rule.fsig
+      if (typeof rule.attribute !== 'undefined') {
+        const attrStr = Array.isArray(rule.attribute) ? rule.attribute.join(',') : rule.attribute
+        ruleName += `\nSINK Attribute: ${attrStr}`
+      }
+      const taintFlowFinding = this.buildTaintFinding(
+        this.getCheckerId(),
+        this.desc,
+        node,
+        effectiveArgs[0],
+        fclos,
+        TAINT_TAG_NAME_PYTHON,
+        ruleName,
+        [],
+        state?.callstack,
+        state?.callsites
+      )
+      if (!TaintOutputStrategy.isNewFinding(this.resultManager, taintFlowFinding)) return true
+      this.resultManager.newFinding(taintFlowFinding, TaintOutputStrategy.outputStrategyId)
+      return true
+    }
+    if (ccecDecision.enabled && ccecDecision.action === 'force') {
+      const targetArgs = ccecDecision.virtualSink ? effectiveArgs.filter((arg: any) => arg?.taint) : effectiveArgs
+      for (const arg of targetArgs) {
+        if (!arg?.taint) continue
+        if (ccecDecision.virtualSink || arg.taint.isTaintedRec) {
+          arg.taint.addTag(TAINT_TAG_NAME_PYTHON)
+          if (Array.isArray(ccecDecision.traces) && ccecDecision.traces.length > 0) {
+            arg.taint.setAllTraces(ccecDecision.traces)
+          }
+        }
+      }
+    }
     if (ctpcDecision.enabled && ctpcDecision.action === 'force') {
-      for (const arg of args) {
+      for (const arg of effectiveArgs) {
         if (!arg?.taint) continue
         arg.taint.addTag(TAINT_TAG_NAME_PYTHON)
         if (!arg.taint.hasTraces()) {
@@ -258,7 +361,9 @@ class PythonTaintAbstractChecker extends TaintChecker {
               line: ctpcDecision.sourceLine || node?.loc?.start?.line,
               node,
               tag: 'SOURCE: ',
-              affectedNodeName: `LAPIS CTPC: ${ctpcDecision.reason}`,
+              affectedNodeName: `LAPIS CTPC: ${ctpcDecision.reason}${
+                ctpcDecision.finalSink ? `; final sink ${ctpcDecision.finalSink}` : ''
+              }`,
             },
           ])
         }
@@ -268,7 +373,7 @@ class PythonTaintAbstractChecker extends TaintChecker {
     const ndResultWithMatchedSanitizerTagsArray = SanitizerChecker.findTagAndMatchedSanitizer(
       node,
       fclos,
-      args,
+      effectiveArgs,
       null,
       TAINT_TAG_NAME_PYTHON,
       true,
@@ -278,10 +383,13 @@ class PythonTaintAbstractChecker extends TaintChecker {
       for (const ndResultWithMatchedSanitizerTags of ndResultWithMatchedSanitizerTagsArray) {
         const { nd } = ndResultWithMatchedSanitizerTags
         const { matchedSanitizerTags } = ndResultWithMatchedSanitizerTags
-        let ruleName = rule.fsig
+        let ruleName = ctpcDecision?.finalSink || rule.fsig
         if (typeof rule.attribute !== 'undefined') {
           const attrStr = Array.isArray(rule.attribute) ? rule.attribute.join(',') : rule.attribute
           ruleName += `\nSINK Attribute: ${attrStr}`
+        }
+        if (ctpcDecision?.sinkAttribute) {
+          ruleName += `\nSINK Attribute: ${ctpcDecision.sinkAttribute}`
         }
         const taintFlowFinding = this.buildTaintFinding(
           this.getCheckerId(),

@@ -1,0 +1,125 @@
+{
+  "schema_version": "lapis.case_index.v1",
+  "cases_root": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases",
+  "case_count": 6,
+  "groups": {
+    "connectivity_gap": [
+      {
+        "case_id": "cve-2023-24816-ipython",
+        "project": "IPython",
+        "category": "缺失调用边",
+        "gap_type": "connectivity_gap",
+        "repair_branch": "ccec",
+        "difficulty": "middle",
+        "case_path": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/connectivity_gap/cve-2023-24816-ipython/case.json"
+      },
+      {
+        "case_id": "cve-2024-27758-rpyc",
+        "project": "RPyC",
+        "category": "缺失调用边",
+        "gap_type": "connectivity_gap",
+        "repair_branch": "ccec",
+        "difficulty": "hard",
+        "case_path": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/connectivity_gap/cve-2024-27758-rpyc/case.json"
+      }
+    ],
+    "propagation_gap": [
+      {
+        "case_id": "cve-2024-36039-pymysql",
+        "project": "PyMySQL",
+        "category": "缺失数据流",
+        "gap_type": "propagation_gap",
+        "repair_branch": "ctpc",
+        "difficulty": "middle",
+        "case_path": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/propagation_gap/cve-2024-36039-pymysql/case.json"
+      }
+    ],
+    "mixed_case": [
+      {
+        "case_id": "cve-2025-55156-pyload",
+        "project": "pyLoad",
+        "category": "调用边和数据流都缺失",
+        "gap_type": "mixed_case",
+        "repair_branch": "ccec_then_ctpc",
+        "difficulty": "hard",
+        "case_path": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/mixed_case/cve-2025-55156-pyload/case.json"
+      },
+      {
+        "case_id": "cve-2026-24486-python-multipart",
+        "project": "python-multipart",
+        "category": "调用边和数据流都缺失",
+        "gap_type": "mixed_case",
+        "repair_branch": "ccec_then_ctpc",
+        "difficulty": "hard",
+        "case_path": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/mixed_case/cve-2026-24486-python-multipart/case.json"
+      }
+    ],
+    "control": [
+      {
+        "case_id": "cve-2023-4033-mlflow",
+        "project": "MLflow",
+        "category": "对照组",
+        "gap_type": "no_gap_control",
+        "repair_branch": "no_repair",
+        "difficulty": "control",
+        "case_path": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/control/cve-2023-4033-mlflow/case.json"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "case_id": "cve-2023-24816-ipython",
+      "project": "IPython",
+      "category": "缺失调用边",
+      "gap_type": "connectivity_gap",
+      "repair_branch": "ccec",
+      "difficulty": "middle",
+      "case_path": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/connectivity_gap/cve-2023-24816-ipython/case.json"
+    },
+    {
+      "case_id": "cve-2024-27758-rpyc",
+      "project": "RPyC",
+      "category": "缺失调用边",
+      "gap_type": "connectivity_gap",
+      "repair_branch": "ccec",
+      "difficulty": "hard",
+      "case_path": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/connectivity_gap/cve-2024-27758-rpyc/case.json"
+    },
+    {
+      "case_id": "cve-2024-36039-pymysql",
+      "project": "PyMySQL",
+      "category": "缺失数据流",
+      "gap_type": "propagation_gap",
+      "repair_branch": "ctpc",
+      "difficulty": "middle",
+      "case_path": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/propagation_gap/cve-2024-36039-pymysql/case.json"
+    },
+    {
+      "case_id": "cve-2025-55156-pyload",
+      "project": "pyLoad",
+      "category": "调用边和数据流都缺失",
+      "gap_type": "mixed_case",
+      "repair_branch": "ccec_then_ctpc",
+      "difficulty": "hard",
+      "case_path": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/mixed_case/cve-2025-55156-pyload/case.json"
+    },
+    {
+      "case_id": "cve-2026-24486-python-multipart",
+      "project": "python-multipart",
+      "category": "调用边和数据流都缺失",
+      "gap_type": "mixed_case",
+      "repair_branch": "ccec_then_ctpc",
+      "difficulty": "hard",
+      "case_path": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/mixed_case/cve-2026-24486-python-multipart/case.json"
+    },
+    {
+      "case_id": "cve-2023-4033-mlflow",
+      "project": "MLflow",
+      "category": "对照组",
+      "gap_type": "no_gap_control",
+      "repair_branch": "no_repair",
+      "difficulty": "control",
+      "case_path": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/control/cve-2023-4033-mlflow/case.json"
+    }
+  ]
+}
