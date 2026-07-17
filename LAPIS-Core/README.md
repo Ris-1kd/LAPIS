@@ -88,6 +88,41 @@ through `--oracle` or `--oracle-root`. If no oracle exists, the report records
 `reported_without_oracle` or `not_reported_without_oracle` based on the final
 full-case YASA result.
 
+Optional LLM automation uses any OpenAI-compatible chat-completions API. Keep
+API keys out of the repository:
+
+```bash
+export LAPIS_LLM_BASE_URL=https://dasuapi.com/v1
+export LAPIS_LLM_MODEL=gpt-4o-mini
+export LAPIS_LLM_API_KEY=...
+
+PYTHONPATH=/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Core/src \
+python3 -m lapis llm-smoke-test
+```
+
+For one-off tests without exporting a key:
+
+```bash
+PYTHONPATH=/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Core/src \
+python3 -m lapis llm-smoke-test \
+  --base-url https://dasuapi.com/v1 \
+  --model gpt-4o-mini \
+  --api-key-stdin
+```
+
+With `--llm-auto`, the E2E runner calls the configured LLM when CCEC/CTPC
+synthesis is needed:
+
+```bash
+PYTHONPATH=/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Core/src \
+python3 -m lapis run-end-to-end-case \
+  --tool-dir /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Tool \
+  --case /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/mixed_case/cve-2026-24486-python-multipart/case.json \
+  --out-dir /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/mixed_case/cve-2026-24486-python-multipart/e2e \
+  --uast-sdk-path /home/ubuntu/llm-yasa-repair/YASA-Engine-upstream/uast4py-linux-amd64 \
+  --llm-auto
+```
+
 Expected routing:
 
 ```text

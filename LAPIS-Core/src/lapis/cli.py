@@ -21,6 +21,7 @@ from .ctpc_schema import upgrade_ctpc_file
 from .diagnosis import build_gap_diagnosis_report
 from .e2e import run_end_to_end_case, run_end_to_end_cases
 from .gate import build_evidence_gate_report, summarize_callgraph
+from .llm import chat_json, chat_text, config_from_env, extract_json_object, read_api_key_from_stdin, write_llm_artifacts
 from .prompt import build_ccec_prompt, build_ccec_validation_prompt, build_ctpc_prompt, build_validation_prompt
 from .validator import build_yasa_validation_rules, validate_ctpc
 from .yasa_runner import build_feasibility_report, run_yasa_case, run_yasa_validation
@@ -29,6 +30,27 @@ from .yasa_runner import build_feasibility_report, run_yasa_case, run_yasa_valid
 def _load_json(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def _llm_config_from_args(args: argparse.Namespace):
+    api_key = read_api_key_from_stdin() if getattr(args, "api_key_stdin", False) else None
+    return config_from_env(
+        api_key=api_key,
+        base_url=getattr(args, "base_url", None),
+        model=getattr(args, "model", None),
+        timeout_seconds=getattr(args, "llm_timeout_seconds", 120),
+        temperature=getattr(args, "temperature", 0.0),
+        max_tokens=getattr(args, "max_tokens", 4096),
+    )
+
+
+def _add_llm_args(parser: argparse.ArgumentParser, *, max_tokens: int = 4096) -> None:
+    parser.add_argument("--base-url", help="OpenAI-compatible base URL, e.g. https://dasuapi.com/v1")
+    parser.add_argument("--model", help="LLM model name")
+    parser.add_argument("--api-key-stdin", action="store_true", help="Read API key from stdin instead of env")
+    parser.add_argument("--llm-timeout-seconds", default=120, type=int, help="LLM API timeout")
+    parser.add_argument("--temperature", default=0.0, type=float, help="LLM sampling temperature")
+    parser.add_argument("--max-tokens", default=max_tokens, type=int, help="LLM response token budget")
 
 
 def _resolve_case_value(case_dir: Path, value: str | None) -> Path | None:
@@ -834,6 +856,8 @@ def main() -> None:
     e2e_case_cmd.add_argument("--timeout-seconds", default=180, type=int, help="Timeout per full-case run")
     e2e_case_cmd.add_argument("--checker-ids", default="taint_flow_python_input_inner", help="Checker IDs for YASA")
     e2e_case_cmd.add_argument("--oracle", type=Path, help="Optional hidden oracle JSON, read only during final evaluation")
+    e2e_case_cmd.add_argument("--llm-auto", action="store_true", help="Call the configured LLM for CCEC/CTPC synthesis")
+    _add_llm_args(e2e_case_cmd, max_tokens=8192)
 
     e2e_cases_cmd = subparsers.add_parser(
         "run-end-to-end-cases",
@@ -846,6 +870,34 @@ def main() -> None:
     e2e_cases_cmd.add_argument("--timeout-seconds", default=180, type=int, help="Timeout per full-case run")
     e2e_cases_cmd.add_argument("--checker-ids", default="taint_flow_python_input_inner", help="Checker IDs for YASA")
     e2e_cases_cmd.add_argument("--oracle-root", type=Path, help="Optional directory of hidden oracle JSON files by case_id")
+    e2e_cases_cmd.add_argument("--llm-auto", action="store_true", help="Call the configured LLM for CCEC/CTPC synthesis")
+    _add_llm_args(e2e_cases_cmd, max_tokens=8192)
+
+    llm_smoke_cmd = subparsers.add_parser(
+        "llm-smoke-test",
+        help="Call an OpenAI-compatible LLM API and parse a tiny JSON response",
+    )
+    _add_llm_args(llm_smoke_cmd, max_tokens=256)
+
+    llm_ccec_cmd = subparsers.add_parser(
+        "llm-generate-ccec",
+        help="Build a CCEC prompt, call the LLM, and write candidate_edges JSON",
+    )
+    llm_ccec_cmd.add_argument("--case", required=True, type=Path, help="Path to case.json")
+    llm_ccec_cmd.add_argument("--out", required=True, type=Path, help="Output candidate_edges JSON")
+    llm_ccec_cmd.add_argument("--gate", type=Path, help="Optional evidence_gate.json")
+    llm_ccec_cmd.add_argument("--diagnosis", type=Path, help="Optional gap_diagnosis.json")
+    llm_ccec_cmd.add_argument("--raw-out", type=Path, help="Optional raw LLM text output")
+    _add_llm_args(llm_ccec_cmd, max_tokens=8192)
+
+    llm_ctpc_cmd = subparsers.add_parser(
+        "llm-generate-ctpc",
+        help="Build a CTPC prompt from an Evidence Pack, call the LLM, and write CTPC JSON",
+    )
+    llm_ctpc_cmd.add_argument("--evidence", required=True, type=Path, help="Path to evidence_pack.json")
+    llm_ctpc_cmd.add_argument("--out", required=True, type=Path, help="Output CTPC response JSON")
+    llm_ctpc_cmd.add_argument("--raw-out", type=Path, help="Optional raw LLM text output")
+    _add_llm_args(llm_ctpc_cmd, max_tokens=8192)
 
     ccec_cmd = subparsers.add_parser(
         "generate-ccec-candidates",
@@ -1111,6 +1163,7 @@ def main() -> None:
         print(f"wrote={args.out}")
         print(f"wrote={args.out.with_suffix('.md')}")
     elif args.command == "run-end-to-end-case":
+        llm_config = _llm_config_from_args(args) if args.llm_auto else None
         report = run_end_to_end_case(
             tool_dir=args.tool_dir,
             case_path=args.case,
@@ -1119,12 +1172,14 @@ def main() -> None:
             timeout_seconds=args.timeout_seconds,
             checker_ids=args.checker_ids,
             oracle_path=args.oracle,
+            llm_config=llm_config,
         )
         print(f"case_id={report['case_id']}")
         print(f"final_result={report['evaluation']['final_result']}")
         print(f"evaluation={report['evaluation']['status']}")
         print(f"wrote={Path(report['out_dir']) / 'end_to_end_report.json'}")
     elif args.command == "run-end-to-end-cases":
+        llm_config = _llm_config_from_args(args) if args.llm_auto else None
         report = run_end_to_end_cases(
             tool_dir=args.tool_dir,
             cases_root=args.cases_root,
@@ -1133,12 +1188,53 @@ def main() -> None:
             timeout_seconds=args.timeout_seconds,
             checker_ids=args.checker_ids,
             oracle_root=args.oracle_root,
+            llm_config=llm_config,
         )
         print(f"cases_root={report['cases_root']}")
         print(f"case_count={report['case_count']}")
         for item in report["cases"]:
             print(f"{item['case_id']} final={item['final_result']} evaluation={item['evaluation_status']}")
         print(f"wrote={Path(report['out_dir']) / 'end_to_end_suite_report.json'}")
+    elif args.command == "llm-smoke-test":
+        config = _llm_config_from_args(args)
+        prompt_text = (
+            "Return exactly one JSON object with this shape: "
+            "{\"ok\": true, \"message\": \"lapis llm smoke test\"}"
+        )
+        response = chat_json(prompt_text, config)
+        print(f"base_url={config.base_url}")
+        print(f"model={config.model}")
+        print(f"ok={response.get('ok')}")
+        print(f"message={response.get('message')}")
+    elif args.command == "llm-generate-ccec":
+        config = _llm_config_from_args(args)
+        case = _load_json(args.case)
+        gate = _load_json(args.gate) if args.gate else None
+        diagnosis = _load_json(args.diagnosis) if args.diagnosis else None
+        prompt_text = build_ccec_prompt(case, gate, diagnosis, oracle_safe=True)
+        raw_text = chat_text(prompt_text, config)
+        response = extract_json_object(raw_text)
+        write_llm_artifacts(args.out, response, raw_text)
+        if args.raw_out:
+            args.raw_out.parent.mkdir(parents=True, exist_ok=True)
+            args.raw_out.write_text(raw_text, encoding="utf-8")
+        print(f"case_id={response.get('case_id') or case.get('case_id')}")
+        print(f"candidate_edges={len(response.get('candidate_edges', []) or [])}")
+        print(f"wrote={args.out}")
+    elif args.command == "llm-generate-ctpc":
+        config = _llm_config_from_args(args)
+        evidence = _load_json(args.evidence)
+        prompt_text = build_ctpc_prompt(evidence)
+        raw_text = chat_text(prompt_text, config)
+        response = extract_json_object(raw_text)
+        write_llm_artifacts(args.out, response, raw_text)
+        if args.raw_out:
+            args.raw_out.parent.mkdir(parents=True, exist_ok=True)
+            args.raw_out.write_text(raw_text, encoding="utf-8")
+        print(f"case_id={evidence.get('case_id')}")
+        print(f"schema_version={response.get('schema_version')}")
+        print(f"propagation_edges={len(response.get('propagation_edges', []) or [])}")
+        print(f"wrote={args.out}")
     elif args.command == "generate-ccec-candidates":
         report = build_ccec_candidates(
             args.case,

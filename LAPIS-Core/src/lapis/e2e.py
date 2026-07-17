@@ -10,7 +10,9 @@ from .cases import discover_cases
 from .ccec import build_ccec_candidates, validate_ccec_candidates
 from .diagnosis import build_gap_diagnosis_report
 from .gate import build_evidence_gate_report
+from .llm import LLMConfig, chat_text, extract_json_object, write_llm_artifacts
 from .prompt import build_ctpc_prompt
+from .prompt import build_ccec_prompt
 from .yasa_runner import run_yasa_case
 
 
@@ -81,6 +83,35 @@ def _prepare_ctpc_synthesis(case_dir: Path, out_dir: Path) -> dict[str, Any]:
     return {"todo": str(todo_path), "prompt": str(prompt_path) if prompt_path.exists() else None}
 
 
+def _llm_generate_ccec(
+    *,
+    case: dict[str, Any],
+    gate: dict[str, Any],
+    diagnosis: dict[str, Any],
+    out_path: Path,
+    config: LLMConfig,
+) -> dict[str, Any]:
+    prompt_text = build_ccec_prompt(case, gate, diagnosis, oracle_safe=True)
+    raw_text = chat_text(prompt_text, config)
+    response = extract_json_object(raw_text)
+    write_llm_artifacts(out_path, response, raw_text)
+    return response
+
+
+def _llm_generate_ctpc(
+    *,
+    evidence_path: Path,
+    out_path: Path,
+    config: LLMConfig,
+) -> dict[str, Any]:
+    evidence = load_json(evidence_path)
+    prompt_text = build_ctpc_prompt(evidence)
+    raw_text = chat_text(prompt_text, config)
+    response = extract_json_object(raw_text)
+    write_llm_artifacts(out_path, response, raw_text)
+    return response
+
+
 def _evaluate_final(
     case: dict[str, Any],
     final_run: dict[str, Any] | None,
@@ -133,6 +164,7 @@ def run_end_to_end_case(
     timeout_seconds: int = 180,
     checker_ids: str = "taint_flow_python_input_inner",
     oracle_path: Path | None = None,
+    llm_config: LLMConfig | None = None,
 ) -> dict[str, Any]:
     """Run baseline -> CCEC -> post-CCEC rediagnosis -> optional CTPC -> final evaluation."""
 
@@ -188,6 +220,22 @@ def run_end_to_end_case(
     if next_step in {"run_ccec", "run_ccec_first"}:
         ccec_path = ccec_dir / "candidate_edges.json"
         ccec_report = build_ccec_candidates(case_path, ccec_path)
+        if llm_config and (ccec_report.get("llm_required") or not ccec_report.get("candidate_edges")):
+            ccec_path = ccec_dir / "candidate_edges.llm.json"
+            ccec_report = _llm_generate_ccec(
+                case=case,
+                gate=initial_gate,
+                diagnosis=initial_diagnosis,
+                out_path=ccec_path,
+                config=llm_config,
+            )
+            stages.append(
+                {
+                    "name": "llm_ccec_generation",
+                    "model": llm_config.model,
+                    "candidate_count": len(ccec_report.get("candidate_edges", []) or []),
+                }
+            )
         ccec_validation_path = ccec_dir / "validation_report.json"
         ccec_validation = validate_ccec_candidates(ccec_path, ccec_validation_path)
         stages.append(
@@ -270,6 +318,43 @@ def run_end_to_end_case(
                 }
             )
             artifacts["ctpc_file"] = str(ctpc_path)
+        elif llm_config and (case_dir / "evidence" / "evidence_pack.json").exists():
+            ctpc_dir = out_dir / "ctpc"
+            ctpc_path = ctpc_dir / "ctpc.llm.json"
+            ctpc_response = _llm_generate_ctpc(
+                evidence_path=case_dir / "evidence" / "evidence_pack.json",
+                out_path=ctpc_path,
+                config=llm_config,
+            )
+            stages.append(
+                {
+                    "name": "llm_ctpc_generation",
+                    "model": llm_config.model,
+                    "schema_version": ctpc_response.get("schema_version"),
+                    "propagation_edges": len(ctpc_response.get("propagation_edges", []) or []),
+                }
+            )
+            final_run = run_yasa_case(
+                tool_dir=tool_dir,
+                case_path=case_path,
+                out_dir=runs_dir,
+                uast_sdk_path=uast_sdk_path,
+                label="post-ccec-ctpc" if ccec_path else "post-ctpc",
+                timeout_seconds=timeout_seconds,
+                ctpc_file=ctpc_path,
+                ccec_file=ccec_path,
+                checker_ids=checker_ids,
+                dump_cg=True,
+            )
+            stages.append(
+                {
+                    "name": "ctpc_rerun",
+                    "ctpc_file": str(ctpc_path),
+                    "status": final_run["status"],
+                    "result": final_run["result"],
+                }
+            )
+            artifacts["ctpc_file"] = str(ctpc_path)
         else:
             ctpc_todo = _prepare_ctpc_synthesis(case_dir, out_dir)
             stages.append(
@@ -312,6 +397,7 @@ def run_end_to_end_cases(
     timeout_seconds: int = 180,
     checker_ids: str = "taint_flow_python_input_inner",
     oracle_root: Path | None = None,
+    llm_config: LLMConfig | None = None,
 ) -> dict[str, Any]:
     rows = []
     out_dir = out_dir.resolve()
@@ -330,6 +416,7 @@ def run_end_to_end_cases(
                 timeout_seconds=timeout_seconds,
                 checker_ids=checker_ids,
                 oracle_path=oracle_path,
+                llm_config=llm_config,
             )
             rows.append(
                 {
