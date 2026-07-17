@@ -92,8 +92,8 @@ Optional LLM automation uses any OpenAI-compatible chat-completions API. Keep
 API keys out of the repository:
 
 ```bash
-export LAPIS_LLM_BASE_URL=https://dasuapi.com/v1
-export LAPIS_LLM_MODEL=gpt-4o-mini
+export LAPIS_LLM_BASE_URL=https://your-openai-compatible-provider.example/v1
+export LAPIS_LLM_MODEL=your-model-name
 export LAPIS_LLM_API_KEY=...
 
 PYTHONPATH=/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Core/src \
@@ -105,8 +105,8 @@ For one-off tests without exporting a key:
 ```bash
 PYTHONPATH=/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Core/src \
 python3 -m lapis llm-smoke-test \
-  --base-url https://dasuapi.com/v1 \
-  --model gpt-4o-mini \
+  --base-url https://your-openai-compatible-provider.example/v1 \
+  --model your-model-name \
   --api-key-stdin
 ```
 

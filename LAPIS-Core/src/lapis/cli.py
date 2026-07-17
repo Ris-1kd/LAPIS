@@ -45,7 +45,7 @@ def _llm_config_from_args(args: argparse.Namespace):
 
 
 def _add_llm_args(parser: argparse.ArgumentParser, *, max_tokens: int = 4096) -> None:
-    parser.add_argument("--base-url", help="OpenAI-compatible base URL, e.g. https://dasuapi.com/v1")
+    parser.add_argument("--base-url", help="OpenAI-compatible base URL")
     parser.add_argument("--model", help="LLM model name")
     parser.add_argument("--api-key-stdin", action="store_true", help="Read API key from stdin instead of env")
     parser.add_argument("--llm-timeout-seconds", default=120, type=int, help="LLM API timeout")
