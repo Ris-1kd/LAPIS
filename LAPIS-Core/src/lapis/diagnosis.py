@@ -44,39 +44,12 @@ def diagnose_gap(gate: dict[str, Any]) -> dict[str, Any]:
     if gate_status != "candidate_fn":
         return {
             "gap_type": "not_repair_candidate",
+            "confirmed_gap_type": "not_repair_candidate",
             "primary_gap": None,
             "secondary_gap": None,
             "next_step": "stop",
+            "needs_post_ccec_rediagnosis": False,
             "reason": [f"Evidence Gate status is {gate_status!r}, not 'candidate_fn'"],
-        }
-
-    expected_gap = gate.get("case_gap_type")
-    if expected_gap in {"connectivity_gap", "propagation_gap", "mixed_case"}:
-        if expected_gap == "connectivity_gap":
-            return {
-                "gap_type": "connectivity_gap",
-                "primary_gap": "connectivity_gap",
-                "secondary_gap": None,
-                "next_step": "run_ccec",
-                "reason": ["case metadata and Evidence Gate agree this is a Connectivity Gap"],
-            }
-        if expected_gap == "propagation_gap":
-            return {
-                "gap_type": "propagation_gap",
-                "primary_gap": "propagation_gap",
-                "secondary_gap": None,
-                "next_step": "run_ctpc",
-                "reason": ["case metadata and Evidence Gate agree this is a Propagation Gap"],
-            }
-        return {
-            "gap_type": "mixed_case",
-            "primary_gap": "connectivity_gap",
-            "secondary_gap": "possible_propagation_gap",
-            "next_step": "run_ccec_first",
-            "reason": [
-                "case metadata and Evidence Gate agree this is a Mixed Case",
-                "Mixed cases are repaired by accepting call-edge contracts first, rerunning analysis, then checking dataflow again",
-            ],
         }
 
     connectivity = _has_symbolic_callee(gate)
@@ -89,36 +62,46 @@ def diagnose_gap(gate: dict[str, Any]) -> dict[str, Any]:
 
     if connectivity and propagation:
         return {
-            "gap_type": "mixed_case",
+            "gap_type": "connectivity_gap",
+            "confirmed_gap_type": None,
             "primary_gap": "connectivity_gap",
             "secondary_gap": "possible_propagation_gap",
             "next_step": "run_ccec_first",
+            "needs_post_ccec_rediagnosis": True,
+            "rediagnosis_after": "post_ccec_rerun",
             "reason": reasons
             + [
-                "Mixed cases are repaired by accepting call-edge contracts first, rerunning analysis, then checking dataflow again"
+                "Baseline evidence cannot confirm a mixed case before CCEC repair",
+                "Accept call-edge contracts first, rerun analysis, then diagnose whether a propagation gap remains",
             ],
         }
     if connectivity:
         return {
             "gap_type": "connectivity_gap",
+            "confirmed_gap_type": "connectivity_gap",
             "primary_gap": "connectivity_gap",
             "secondary_gap": None,
             "next_step": "run_ccec",
+            "needs_post_ccec_rediagnosis": False,
             "reason": reasons,
         }
     if propagation:
         return {
             "gap_type": "propagation_gap",
+            "confirmed_gap_type": "propagation_gap",
             "primary_gap": "propagation_gap",
             "secondary_gap": None,
             "next_step": "run_ctpc",
+            "needs_post_ccec_rediagnosis": False,
             "reason": reasons,
         }
     return {
         "gap_type": "inconclusive",
+        "confirmed_gap_type": None,
         "primary_gap": None,
         "secondary_gap": None,
         "next_step": "defer",
+        "needs_post_ccec_rediagnosis": False,
         "reason": ["Evidence Gate passed, but neither connectivity nor propagation evidence is strong enough"],
     }
 
@@ -142,7 +125,7 @@ def build_gap_diagnosis_report(gate_path: Path, out_path: Path) -> dict[str, Any
 def _repair_order(diagnosis: dict[str, Any]) -> list[str]:
     next_step = diagnosis.get("next_step")
     if next_step == "run_ccec_first":
-        return ["ccec", "rerun_baseline", "ctpc_if_still_broken"]
+        return ["ccec", "rerun_with_ccec", "rediagnose_gap", "ctpc_if_propagation_gap_remains"]
     if next_step == "run_ccec":
         return ["ccec"]
     if next_step == "run_ctpc":

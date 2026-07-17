@@ -186,15 +186,13 @@ def _edge_coverage(ctpc: dict[str, Any], sample_analyses: dict[str, dict[str, An
             condition = edge.get("condition")
         covered = False
         reason = "not observed in must-flow sample"
-        if edge_kind == "dict_literal_key" or (edge_from == "key" and edge_to == "args.keys()[*]"):
+        if edge_kind == "dict_literal_key":
             covered = bool(features.get("dict_vars_with_tainted_key"))
             reason = "tainted source variable appears in dict key position"
-        elif edge_kind == "dict_comprehension_key_preserved" or (
-            edge_from == "args.keys()[*]" and edge_to == "escaped_args.keys()[*]"
-        ):
+        elif edge_kind == "dict_comprehension_key_preserved":
             covered = bool(features.get("escaped_vars_preserving_keys"))
             reason = "dict comprehension preserves keys from tainted-key mapping"
-        elif edge_kind == "percent_mapping_key" or (edge_from == "escaped_args.keys()[*]" and edge_to == "query"):
+        elif edge_kind == "percent_mapping_key":
             covered = bool(features.get("formatted_query_vars"))
             reason = "percent formatting consumes mapping with preserved tainted keys"
         coverage.append(
@@ -276,8 +274,8 @@ def validate_ctpc(ctpc_path: Path, validation_dir: Path, out_dir: Path) -> dict[
         "feedback": _feedback(status, sample_results, coverage),
         "next_runner": {
             "kind": "yasa-in-the-loop",
-            "state": "not_wired",
-            "purpose": "replace structural simulation with baseline/enhanced YASA findings for each validation sample",
+            "state": "available_via_build_validation_rules_and_run_yasa_validation",
+            "purpose": "confirm structural simulation with baseline/enhanced YASA findings for each validation sample",
         },
     }
 

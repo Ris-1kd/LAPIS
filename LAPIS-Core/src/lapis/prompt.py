@@ -128,51 +128,11 @@ def _compact_ccec_payload(
     diagnosis: dict[str, Any] | None = None,
     oracle_safe: bool = False,
 ) -> dict[str, Any]:
-    if oracle_safe:
-        return _compact_oracle_safe_ccec_payload(case, gate, diagnosis)
-
-    return {
-        "case_id": case.get("case_id"),
-        "project": case.get("project"),
-        "vulnerability": case.get("vulnerability"),
-        "gap_type": case.get("gap_type"),
-        "repair_branch": case.get("repair_branch"),
-        "difficulty": case.get("difficulty"),
-        "source": case.get("source"),
-        "sink": case.get("sink"),
-        "breakpoint": case.get("breakpoint"),
-        "expected_repair_order": case.get("expected_repair_order"),
-        "evidence_gate": {
-            "gate_status": gate.get("gate_status"),
-            "baseline_status": gate.get("baseline_status"),
-            "source_forward_frontier": gate.get("source_forward_frontier"),
-            "sink_backward_dependency": gate.get("sink_backward_dependency"),
-            "symbolic_callee": gate.get("symbolic_callee"),
-            "local_structure_evidence": gate.get("local_structure_evidence"),
-            "negative_evidence": gate.get("negative_evidence"),
-            "explosion_risk": gate.get("explosion_risk"),
-            "decision_reason": gate.get("decision_reason"),
-        }
-        if gate
-        else None,
-        "gap_diagnosis": diagnosis.get("diagnosis") if diagnosis else None,
-    }
+    return _compact_oracle_safe_ccec_payload(case, gate, diagnosis)
 
 
 def _first_frontier_item(items: list[Any]) -> Any:
     return items[0] if items else None
-
-
-def _oracle_safe_breakpoint(case: dict[str, Any]) -> dict[str, Any] | None:
-    breakpoint = case.get("breakpoint") or {}
-    frontier = breakpoint.get("frontier") or []
-    if not breakpoint:
-        return None
-    return {
-        "kind": breakpoint.get("kind"),
-        "observed_boundary": _first_frontier_item(frontier),
-        "note": "Full benchmark repair chain omitted in oracle-safe mode.",
-    }
 
 
 def _oracle_safe_frontier(frontier: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -260,17 +220,41 @@ def _calls_at_line(module: ast.Module, line: int) -> list[ast.Call]:
     return [node for node in ast.walk(module) if isinstance(node, ast.Call) and getattr(node, "lineno", 0) == line]
 
 
-def _if_guard_for_function(module: ast.Module, function: ast.FunctionDef, text: str) -> list[str]:
-    def visit_statements(statements: list[ast.stmt], guards: list[str]) -> list[str] | None:
+def _if_guard_for_function(module: ast.Module, function: ast.FunctionDef, text: str, file_name: str) -> list[dict[str, Any]]:
+    def if_guard(statement: ast.If, branch: str, condition: str) -> dict[str, Any]:
+        return {
+            "condition": condition,
+            "derived_from": "ast_control_flow_guard",
+            "evidence": {
+                "file": file_name,
+                "line": statement.lineno,
+                "code": _source_segment(text, statement.test),
+                "branch": branch,
+            },
+        }
+
+    def try_guard(handler: ast.ExceptHandler) -> dict[str, Any]:
+        handler_type = _source_segment(text, handler.type) if handler.type else "Exception"
+        return {
+            "condition": f"except {handler_type}",
+            "derived_from": "ast_exception_handler_guard",
+            "evidence": {
+                "file": file_name,
+                "line": handler.lineno,
+                "code": handler_type,
+            },
+        }
+
+    def visit_statements(statements: list[ast.stmt], guards: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
         for statement in statements:
             if statement is function:
                 return guards
             if isinstance(statement, ast.If):
                 test = _source_segment(text, statement.test)
-                found = visit_statements(statement.body, guards + [test])
+                found = visit_statements(statement.body, guards + [if_guard(statement, "body", test)])
                 if found is not None:
                     return found
-                found = visit_statements(statement.orelse, guards + [f"else of ({test})"])
+                found = visit_statements(statement.orelse, guards + [if_guard(statement, "orelse", f"else of ({test})")])
                 if found is not None:
                     return found
             elif isinstance(statement, ast.Try):
@@ -278,8 +262,7 @@ def _if_guard_for_function(module: ast.Module, function: ast.FunctionDef, text: 
                 if found is not None:
                     return found
                 for handler in statement.handlers:
-                    handler_type = _source_segment(text, handler.type) if handler.type else "Exception"
-                    found = visit_statements(handler.body, guards + [f"except {handler_type}"])
+                    found = visit_statements(handler.body, guards + [try_guard(handler)])
                     if found is not None:
                         return found
                 found = visit_statements(statement.orelse, guards)
@@ -331,7 +314,6 @@ def _extract_dynamic_factory_evidence(
     expr: str,
     module: ast.Module,
     text: str,
-    sink_callee: str | None,
 ) -> dict[str, Any] | None:
     calls = _calls_at_line(module, line)
     getattr_call = next((call for call in calls if _call_name(call.func) == "getattr"), None)
@@ -351,20 +333,26 @@ def _extract_dynamic_factory_evidence(
             continue
         rel = str(file_path.relative_to(dataset_dir))
         for call in ast.walk(file_module):
-            if not isinstance(call, ast.Call) or _call_name(call.func) != "class_factory":
+            if not isinstance(call, ast.Call):
                 continue
-            method_literals = _literal_string_tuples(call.args[1]) if len(call.args) > 1 else []
+            call_expr = _source_segment(file_text, call)
+            if attribute_name not in call_expr:
+                continue
+            method_literals = []
+            for arg in call.args:
+                method_literals.extend(_literal_string_tuples(arg))
             factory_calls.append(
                 {
                     "file": rel,
                     "line": call.lineno,
-                    "expr": _source_segment(file_text, call),
+                    "callee": _call_name(call.func),
+                    "expr": call_expr,
                     "method_literals": method_literals,
-                    "mentions_observed_attribute": any(attribute_name in item for item in method_literals),
+                    "mentions_observed_attribute": attribute_name in call_expr,
                 }
             )
 
-    make_method_branches = []
+    factory_method_branches = []
     dynamic_type_sites = []
     for file_path in sorted(dataset_dir.rglob("*.py")):
         try:
@@ -379,7 +367,7 @@ def _extract_dynamic_factory_evidence(
                     {"file": rel, "line": call.lineno, "expr": _source_segment(file_text, call)}
                 )
         for func in ast.walk(file_module):
-            if not isinstance(func, ast.FunctionDef) or func.name != "_make_method":
+            if not isinstance(func, ast.FunctionDef):
                 continue
             for branch in ast.walk(func):
                 if not isinstance(branch, ast.If):
@@ -387,7 +375,6 @@ def _extract_dynamic_factory_evidence(
                 test = _source_segment(file_text, branch.test)
                 if attribute_name not in test:
                     continue
-                sink_calls = []
                 inner_functions = []
                 body_nodes = [descendant for statement in branch.body for descendant in ast.walk(statement)]
                 for child in body_nodes:
@@ -399,23 +386,21 @@ def _extract_dynamic_factory_evidence(
                                 "args": [arg.arg for arg in child.args.args],
                             }
                         )
-                    if isinstance(child, ast.Call) and sink_callee and _call_name(child.func) == sink_callee:
-                        sink_calls.append(
-                            {
-                                "line": child.lineno,
-                                "callee": sink_callee,
-                                "expr": _source_segment(file_text, child),
-                            }
-                        )
-                make_method_branches.append(
+                factory_method_branches.append(
                     {
                         "file": rel,
                         "line": branch.lineno,
-                        "factory_function": "_make_method",
-                        "guard": test,
+                        "factory_function": func.name,
+                        "guard": {
+                            "condition": test,
+                            "derived_from": "ast_control_flow_guard",
+                            "evidence": {
+                                "file": rel,
+                                "line": branch.lineno,
+                                "code": test,
+                            },
+                        },
                         "inner_functions": inner_functions,
-                        "contains_sink_callee": bool(sink_calls),
-                        "sink_calls": sink_calls,
                     }
                 )
 
@@ -429,21 +414,29 @@ def _extract_dynamic_factory_evidence(
             "attribute_name": attribute_name,
         },
         "factory_calls": factory_calls,
-        "make_method_branches": make_method_branches,
+        "factory_method_branches": factory_method_branches,
         "dynamic_type_sites": dynamic_type_sites,
         "ranking_hints": [
             "Connect getattr(obj, observed_attribute) only to factory methods that materialize the same attribute.",
-            "Prefer _make_method branches whose guard equals the observed attribute name.",
+            "Prefer factory branches whose guard equals the observed attribute name.",
             "Require a dynamic type(..., namespace) site before materializing generated methods.",
-            "Prefer generated methods whose body contains or approaches the configured sink callee.",
         ],
     }
 
 
 def _static_ccec_evidence(case: dict[str, Any]) -> dict[str, Any] | None:
     dataset_dir = case.get("dataset_dir")
-    breakpoint = case.get("breakpoint") or {}
-    boundary = _parse_boundary(_first_frontier_item(breakpoint.get("frontier") or []))
+    public_callsite = case.get("observed_callsite") or case.get("public_callsite")
+    if isinstance(public_callsite, dict):
+        boundary = (
+            public_callsite.get("file"),
+            int(public_callsite.get("line", 0) or 0),
+            public_callsite.get("expr", ""),
+        )
+    else:
+        # Do not read case["breakpoint"].frontier here. That field is benchmark
+        # oracle material and must be hidden during repair synthesis.
+        boundary = None
     if not dataset_dir or not boundary:
         return None
 
@@ -460,9 +453,6 @@ def _static_ccec_evidence(case: dict[str, Any]) -> dict[str, Any] | None:
     calls = _calls_at_line(module, line)
     call = calls[0] if calls else None
     callee_symbol = _call_name(call.func) if call else None
-    sink = case.get("sink") or {}
-    sink_callee = sink.get("callee")
-
     dynamic_evidence = _extract_dynamic_factory_evidence(
         dataset_path,
         relative_file,
@@ -470,7 +460,6 @@ def _static_ccec_evidence(case: dict[str, Any]) -> dict[str, Any] | None:
         expr,
         module,
         text,
-        sink_callee,
     )
     if dynamic_evidence:
         return dynamic_evidence
@@ -480,29 +469,14 @@ def _static_ccec_evidence(case: dict[str, Any]) -> dict[str, Any] | None:
         for node in ast.walk(module):
             if not isinstance(node, ast.FunctionDef) or node.name != callee_symbol:
                 continue
-            sink_calls = []
-            for call_node in ast.walk(node):
-                if not isinstance(call_node, ast.Call):
-                    continue
-                name = _call_name(call_node.func)
-                if sink_callee and name == sink_callee:
-                    sink_calls.append(
-                        {
-                            "line": call_node.lineno,
-                            "callee": name,
-                            "expr": _source_segment(text, call_node),
-                        }
-                    )
             candidate_definitions.append(
                 {
                     "file": relative_file,
                     "line": node.lineno,
                     "function": node.name,
                     "qualified_hint": f"{relative_file[:-3].replace('/', '.')}.{node.name}",
-                    "guards": _if_guard_for_function(module, node, text),
+                    "guards": _if_guard_for_function(module, node, text, relative_file),
                     "args": [arg.arg for arg in node.args.args],
-                    "contains_sink_callee": bool(sink_calls),
-                    "sink_calls": sink_calls,
                 }
             )
 
@@ -520,7 +494,6 @@ def _static_ccec_evidence(case: dict[str, Any]) -> dict[str, Any] | None:
         "ranking_hints": [
             "Prefer definitions whose name matches the observed callee symbol.",
             "Prefer candidates whose guard explains dynamic rebinding or platform dispatch.",
-            "Prefer candidates whose body contains or approaches the known sink callee.",
         ],
     }
 
@@ -548,22 +521,34 @@ def _compact_oracle_safe_ccec_payload(
         "oracle_safe_mode": True,
         "case_id": case.get("case_id"),
         "project": case.get("project"),
-        "vulnerability": case.get("vulnerability"),
-        "gap_type": case.get("gap_type"),
-        "repair_branch": case.get("repair_branch"),
-        "difficulty": case.get("difficulty"),
-        "source": case.get("source"),
-        "sink": case.get("sink"),
-        "breakpoint": _oracle_safe_breakpoint(case),
+        "declared_case_group": case.get("gap_type"),
+        "declared_repair_branch": case.get("repair_branch"),
+        "candidate_gap_type": "connectivity_gap",
+        "ccec_generation_modes": {
+            "easy": {
+                "mechanism": "direct_static_edge",
+                "llm_role": "format/explain only; do not invent candidates",
+                "condition": "single observed callsite and unique static callee evidence",
+            },
+            "middle": {
+                "mechanism": "top_k_static_edges_then_llm_ranking",
+                "llm_role": "rank candidates and refine guards from evidence",
+                "condition": "multiple plausible static callees or guard-sensitive dispatch",
+            },
+            "hard": {
+                "mechanism": "llm_synthesized_virtual_or_materialized_edge",
+                "llm_role": "synthesize a guarded dynamic edge contract from multi-source static evidence",
+                "condition": "factory/reflection/callback-table evidence without a directly materialized callee",
+            },
+        },
         "static_call_evidence": _static_ccec_evidence(case),
         "evidence_gate": gate_payload,
         "gap_diagnosis": diagnosis.get("diagnosis") if diagnosis else None,
         "omitted_oracle_fields": [
-            "expected_repair_order",
-            "full breakpoint.frontier",
-            "full source_forward_frontier.reached",
-            "full sink_backward_dependency chain",
-            "case metadata chain summaries",
+            "manual source/sink annotations",
+            "manual breakpoint annotations",
+            "manual repair-order annotations",
+            "manual source-to-sink chain summaries",
         ],
     }
 
@@ -576,6 +561,7 @@ def build_ccec_prompt(
 ) -> str:
     """Build a deterministic prompt for CCEC candidate call-edge synthesis."""
 
+    oracle_safe = True
     payload_json = json.dumps(
         _compact_ccec_payload(case, gate, diagnosis, oracle_safe=oracle_safe),
         indent=2,
@@ -599,11 +585,18 @@ candidate_edges array and explain why in notes.
 Goal:
 - Repair a missing call-graph connection, not dataflow propagation.
 - Produce candidate call edges and their guard conditions.
+- First classify the CCEC mechanism as easy, middle, or hard:
+  easy = direct static edge; middle = top-k static edges plus LLM ranking;
+  hard = dynamic/virtual/materialized edge synthesis from static evidence.
+- Every guard must be derived from baseline/static evidence and must include
+  derived_from + evidence. Do not use benchmark oracle, known final chain, or
+  case metadata breakpoint fields to create guards.
 - Keep candidates inside the observed callee universe or explicitly mark
   materialized factory-generated callees.
 - Do not generate validation programs in this step. Validation sample
   generation is handled by a separate validator stage.
-- For mixed cases, only repair call edges first. Mark dataflow as pending.
+- If Gap Diagnosis reports possible_propagation_gap, repair only call edges
+  first. Mark dataflow as pending until the post-CCEC rerun confirms it.
 {oracle_safe_note}
 
 Return one JSON object with this exact top-level shape:
@@ -611,8 +604,11 @@ Return one JSON object with this exact top-level shape:
 {{
   "schema_version": "lapis.ccec_candidates.v1",
   "case_id": "string",
-  "gap_type": "connectivity_gap | mixed_case",
+  "gap_type": "connectivity_gap",
   "repair_branch": "ccec | ccec_then_ctpc",
+  "ccec_mode": "easy | middle | hard | deferred",
+  "generation_mechanism": "direct_static_edge | top_k_static_edges_then_llm_ranking | llm_synthesized_virtual_or_materialized_edge | insufficient_evidence",
+  "llm_role": "string",
   "candidate_edges": [
     {{
       "edge_id": "string",
@@ -622,6 +618,13 @@ Return one JSON object with this exact top-level shape:
       "callee_kind": "real_function | materialized_factory_method | callback | rebound_function | builtin_sink",
       "confidence": 0.0,
       "guards": ["string"],
+      "guard_evidence": [
+        {{
+          "condition": "string",
+          "derived_from": "baseline_callgraph | baseline_diagnostic | sarif | ast_callsite | ast_control_flow_guard | function_signature | import_alias | callback_registration | receiver_type",
+          "evidence": {{"file": "string", "line": 0, "code": "string"}}
+        }}
+      ],
       "evidence": ["string"],
       "contract": {{
         "preconditions": ["string"],
@@ -644,7 +647,7 @@ Return one JSON object with this exact top-level shape:
   "validation_expectations": {{
     "structural": "callee exists or can be materialized from evidence",
     "graph_progress": "source frontier advances beyond the symbolic/dangling callsite",
-    "taint_progress": "source becomes closer to sink; mixed cases may still require CTPC"
+    "taint_progress": "source becomes closer to sink; possible propagation gaps require post-CCEC rediagnosis"
   }},
   "dataflow_still_required": false,
   "notes": ["string"]
@@ -686,11 +689,15 @@ or framework behavior.
 
 Goal:
 - Generate validation expectations for repaired call edges.
+- Generate three small standalone Python local semantic samples for callgraph
+  validation. These samples must exercise only the candidate CCEC edge and its
+  guards, not the full CVE chain.
 - Check that the accepted CCEC advances the source frontier past the missing
   symbolic/dangling callsite.
 - Check that nearby unsupported call edges are not accepted.
 - Check that guards can kill or suppress an invalid edge.
-- For mixed cases, validate only callgraph progress and mark dataflow as pending.
+- If a possible propagation gap is pending, validate only callgraph progress
+  and leave dataflow confirmation to the post-CCEC rerun.
 
 Return one JSON object with this exact top-level shape:
 
@@ -737,10 +744,40 @@ Return one JSON object with this exact top-level shape:
       "evidence": ["string"]
     }}
   ],
-  "full_chain_expectation": {{
-    "callgraph_complete": true,
-    "source_to_sink_chain": ["string"],
-    "dataflow_still_required": false
+  "local_samples": {{
+    "must-link": {{
+      "name": "string",
+      "expected": "edge_present",
+      "edge_id": "string",
+      "caller": "string",
+      "callsite": "string",
+      "callee": "string",
+      "guards": ["string"],
+      "code": "def test():\\n    ...\\n",
+      "evidence": ["string"]
+    }},
+    "must-not-link": {{
+      "name": "string",
+      "expected": "edge_absent",
+      "edge_id": "string",
+      "caller": "string",
+      "callsite": "string",
+      "callee": "string",
+      "violated_guard": "string",
+      "code": "def test():\\n    ...\\n",
+      "evidence": ["string"]
+    }},
+    "must-kill": {{
+      "name": "string",
+      "expected": "edge_suppressed",
+      "edge_id": "string",
+      "caller": "string",
+      "callsite": "string",
+      "callee": "string",
+      "kill_condition": "string",
+      "code": "def test():\\n    ...\\n",
+      "evidence": ["string"]
+    }}
   }},
   "notes": ["string"]
 }}
@@ -750,8 +787,11 @@ Important distinction:
 - It must not generate CTPC dataflow propagation rules.
 - CCEC validation uses must-link / must-not-link / must-kill.
   CTPC validation uses must-flow / must-not-flow / must-kill.
-- For mixed cases, set dataflow_still_required=true if the callgraph edge is
-  repaired but taint/value propagation still needs CTPC.
+- local_samples are minimal executable Python programs for local callgraph
+  validation. They must not include the full benchmark source-to-sink path.
+- If possible_propagation_gap is pending, use notes to say whether the
+  validation contract covers only callgraph progress and leaves taint/value
+  propagation for post-CCEC rediagnosis.
 
 Input:
 

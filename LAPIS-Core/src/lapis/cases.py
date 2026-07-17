@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .ccec import build_ccec_candidates, build_repaired_call_chain, validate_ccec_candidates
+from .ccec import build_ccec_candidates, validate_ccec_candidates
 from .diagnosis import build_gap_diagnosis_report
 from .gate import build_evidence_gate_report
 
@@ -80,13 +80,12 @@ def run_repair_workflow(cases_root: Path, out_path: Path | None = None) -> dict[
             ccec_path = case_path.parent / "ccec" / "candidate_edges.json"
             build_ccec_candidates(case_path, ccec_path)
             validate_ccec_candidates(ccec_path, case_path.parent / "ccec" / "validation_report.json")
-            build_repaired_call_chain(case_path, ccec_path, case_path.parent / "ccec" / "repaired_call_chain.json")
         rows.append(
             {
                 "case_id": case.get("case_id"),
                 "project": case.get("project"),
                 "category": case.get("category"),
-                "expected_gap_type": case.get("gap_type"),
+                "declared_case_group": case.get("gap_type"),
                 "gate_status": gate.get("gate_status"),
                 "diagnosed_gap_type": diagnosis["diagnosis"].get("gap_type"),
                 "next_step": diagnosis["diagnosis"].get("next_step"),

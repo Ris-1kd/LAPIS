@@ -21,14 +21,5 @@
     "line": 0,
     "callee": "replace_with_sink_callee",
     "argument": "replace_with_sink_argument"
-  },
-  "expected": {
-    "baseline_finding": 0,
-    "ccec_only_finding": 0,
-    "repaired_finding_min": 1
-  },
-  "notes": [
-    "Mixed benchmarks should require CCEC first and CTPC after CCEC-only still has no complete finding."
-  ]
+  }
 }
-

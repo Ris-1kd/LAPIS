@@ -161,6 +161,7 @@ function hasPattern(event: string, kind: string): boolean {
 
 function rulesFor(event: string, kind: string): any[] {
   const ctpc = loadCtpc()
+  if (!ctpc) return []
   if (ctpc?.schema_version === 'ctpc.v2') {
     const edges = Array.isArray(ctpc.propagation_edges) ? ctpc.propagation_edges : []
     const summaries = Array.isArray(ctpc.function_summaries) ? ctpc.function_summaries : []
@@ -172,7 +173,7 @@ function rulesFor(event: string, kind: string): any[] {
   }
   const edges = ctpc?.propagation_edges
   const kills = ctpc?.kill_conditions
-  if (!Array.isArray(edges)) return [{}]
+  if (!Array.isArray(edges)) return []
   const legacyNeedles: Record<string, string[]> = {
     dict_literal_key: ['dict key', 'key position'],
     dict_comprehension_key_preserved: ['dict comprehension', 'items()'],

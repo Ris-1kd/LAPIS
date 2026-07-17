@@ -59,7 +59,6 @@ function strictSymbolMatches(actual: string, expected: string | undefined): bool
 
 function generatedFactoryMatches(fsig: string, edge: any): boolean {
   if (!fsig || !edge) return false
-  if (fsig === '_make_method') return false
   const callee = String(edge.callee || '')
   return callee.includes(`${fsig}.<generated`) || callee.includes(`.${fsig}.<generated`)
 }
@@ -80,7 +79,7 @@ function isVirtualSinkEdge(edge: any, ccec?: any): boolean {
     edge.callee_kind === 'builtin_sink' &&
     (String(edge.caller || '').includes('<generated') ||
       joinedEvidence.includes('inner function') ||
-      joinedEvidence.includes('_make_method') ||
+      joinedEvidence.includes('factory') ||
       joinedGuards.includes('generated'))
   )
   if (direct) return true
@@ -95,8 +94,6 @@ function edgeMatchesVirtualBoundary(edge: any, ccec: any, sinkRule: any, callTex
   const fsig = sinkRule?.fsig || ''
   if (!isVirtualSinkEdge(edge, ccec)) return false
   if (generatedFactoryMatches(fsig, edge)) return true
-  if (fsig === 'array_callback' && edge.callee_kind === 'materialized_factory_method') return true
-  if (fsig === '_make_method' && callText.includes('"__array__"')) return true
   if (callText && typeof edge.callsite === 'string' && textMatches(callText, edge.callsite)) return true
   return false
 }

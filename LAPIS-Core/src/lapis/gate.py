@@ -117,25 +117,6 @@ def _source_frontier(evidence: dict[str, Any] | None, callgraph_summary: dict[st
     return {"available": False, "frontier": None, "reached": [], "observations": []}
 
 
-def _source_frontier_from_case(case: dict[str, Any]) -> dict[str, Any]:
-    breakpoint = case.get("breakpoint") or {}
-    frontier = breakpoint.get("frontier") or []
-    if not frontier:
-        return {"available": False, "frontier": None, "reached": [], "observations": []}
-    return {
-        "available": True,
-        "frontier": frontier[-1],
-        "reached": frontier,
-        "observations": [
-            {
-                "kind": breakpoint.get("kind", "case_metadata_breakpoint"),
-                "expr": item,
-            }
-            for item in frontier
-        ],
-    }
-
-
 def _sink_backward(evidence: dict[str, Any] | None) -> dict[str, Any]:
     if not evidence:
         return {"available": False, "dependency_chain": [], "observations": []}
@@ -147,59 +128,12 @@ def _sink_backward(evidence: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
-def _sink_backward_from_case(case: dict[str, Any]) -> dict[str, Any]:
-    sink = case.get("sink") or {}
-    breakpoint = case.get("breakpoint") or {}
-    chain = []
-    if sink.get("expr"):
-        chain.append(sink["expr"])
-    if sink.get("argument"):
-        chain.append(sink["argument"])
-    chain.extend(breakpoint.get("frontier") or [])
-    if not chain:
-        return {"available": False, "dependency_chain": [], "observations": []}
-    return {
-        "available": True,
-        "dependency_chain": chain,
-        "observations": [
-            {
-                "kind": "case_metadata_sink_dependency",
-                "expr": item,
-            }
-            for item in chain
-        ],
-    }
-
-
 def _local_structure(evidence: dict[str, Any] | None) -> dict[str, Any]:
     if not evidence:
         return {"available": False, "kinds": [], "items": {}}
     structure = evidence.get("local_structure_evidence") or {}
     kinds = [key for key, value in structure.items() if value]
     return {"available": bool(kinds), "kinds": kinds, "items": structure}
-
-
-def _local_structure_from_case(case: dict[str, Any]) -> dict[str, Any]:
-    gap_type = case.get("gap_type")
-    breakpoint = case.get("breakpoint") or {}
-    item = {
-        "kind": breakpoint.get("kind", "case_metadata_structure"),
-        "summary": breakpoint.get("summary"),
-        "frontier": breakpoint.get("frontier", []),
-    }
-    if gap_type == "connectivity_gap":
-        kinds = ["callgraph_breakpoint", item["kind"]]
-    elif gap_type == "propagation_gap":
-        kinds = ["access_paths", "function_summaries", item["kind"]]
-    elif gap_type == "mixed_case":
-        kinds = ["callgraph_breakpoint", "access_paths", item["kind"]]
-    else:
-        kinds = []
-    return {
-        "available": bool(kinds),
-        "kinds": kinds,
-        "items": {"case_metadata": [item]} if kinds else {},
-    }
 
 
 def _negative_evidence(evidence: dict[str, Any] | None) -> list[dict[str, Any]]:
@@ -225,10 +159,6 @@ def _explosion_risk(callgraph_summary: dict[str, Any]) -> dict[str, Any]:
     else:
         level = "low"
     return {"level": level, "dangling_edge_count": dangling, "symbolic_node_count": symbolic}
-
-
-def _symbolic_from_case(case: dict[str, Any]) -> bool:
-    return case.get("gap_type") in {"connectivity_gap", "mixed_case"}
 
 
 def _decide_gate(
@@ -271,42 +201,35 @@ def build_evidence_gate_report(
     out_path: Path,
     evidence_path: Path | None = None,
     callgraph_path: Path | None = None,
+    baseline_summary_path: Path | None = None,
 ) -> dict[str, Any]:
     case_path = case_path.resolve()
     case_dir = case_path.parent
     case = load_json(case_path)
-    baseline_path = _resolve_case_file(case_dir, case["baseline_summary"])
+    baseline_path = baseline_summary_path or _resolve_case_file(case_dir, case["baseline_summary"])
     if baseline_path is None:
         raise ValueError("case.json must contain baseline_summary")
+    baseline_path = baseline_path.resolve()
     baseline = _baseline_status(load_json(baseline_path))
-    if case.get("gap_type") != "no_gap_control":
-        baseline["partial_findings"] = baseline["findings"] > 0
-        baseline["complete_taint_path_found"] = False
-    else:
-        baseline["partial_findings"] = False
+    baseline["partial_findings"] = False
     evidence_file = evidence_path or _resolve_case_file(case_dir, "evidence/evidence_pack.json")
     evidence = load_json(evidence_file) if evidence_file and evidence_file.exists() else None
     cg_file = callgraph_path or _resolve_case_file(case_dir, case.get("callgraph"))
     callgraph_summary = summarize_callgraph(cg_file)
     frontier = _source_frontier(evidence, callgraph_summary)
-    if not frontier.get("available"):
-        frontier = _source_frontier_from_case(case)
     backward = _sink_backward(evidence)
-    if not backward.get("available"):
-        backward = _sink_backward_from_case(case)
     local = _local_structure(evidence)
-    if not local.get("available"):
-        local = _local_structure_from_case(case)
     negatives = _negative_evidence(evidence)
-    symbolic_present = callgraph_summary.get("dangling_edge_count", 0) > 0 or _symbolic_from_case(case)
+    symbolic_present = callgraph_summary.get("dangling_edge_count", 0) > 0
     risk = _explosion_risk(callgraph_summary)
     status, reasons = _decide_gate(baseline, frontier, backward, symbolic_present, local, negatives, risk)
     report = {
         "schema_version": "lapis.evidence_gate.v1",
         "case_id": case.get("case_id"),
         "case": str(case_path),
-        "case_gap_type": case.get("gap_type"),
-        "case_repair_branch": case.get("repair_branch"),
+        "baseline_summary": str(baseline_path),
+        "declared_case_group": case.get("gap_type"),
+        "declared_repair_branch": case.get("repair_branch"),
         "gate_status": status,
         "baseline_status": baseline,
         "source_forward_frontier": frontier,
@@ -320,9 +243,10 @@ def build_evidence_gate_report(
         "explosion_risk": risk,
         "decision_reason": reasons,
         "oracle_note": (
-            "This gate identifies evidence-supported candidate FNs. "
-            "A benchmark oracle is still required to label a true false negative."
+            "This gate identifies evidence-supported candidate FNs. Benchmark oracle fields "
+            "are hidden by default and must only be used after repair for evaluation."
         ),
+        "oracle_fallback_used": False,
     }
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

@@ -42,9 +42,51 @@ This command writes, per case:
 ```text
 evidence/evidence_gate.json
 evidence/gap_diagnosis.json
-ccec/candidate_edges.json       for connectivity_gap and mixed_case
+ccec/candidate_edges.json       for connectivity_gap and suspected post-CCEC cases
 ccec/validation_report.json     structural CCEC validation
 ```
+
+Run the full end-to-end loop for one case:
+
+```bash
+PYTHONPATH=/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Core/src \
+python3 -m lapis run-end-to-end-case \
+  --tool-dir /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Tool \
+  --case /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/mixed_case/cve-2026-24486-python-multipart/case.json \
+  --out-dir /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/mixed_case/cve-2026-24486-python-multipart/e2e \
+  --uast-sdk-path /home/ubuntu/llm-yasa-repair/YASA-Engine-upstream/uast4py-linux-amd64
+```
+
+This command writes:
+
+```text
+e2e/runs/baseline/
+e2e/runs/post-ccec/
+e2e/runs/post-ccec-ctpc/     only when CTPC is confirmed and ctpc/ctpc*.json exists
+e2e/evidence/initial_evidence_gate.json
+e2e/evidence/initial_gap_diagnosis.json
+e2e/evidence/post_ccec_evidence_gate.json
+e2e/evidence/post_ccec_gap_diagnosis.json
+e2e/ccec/candidate_edges.json
+e2e/end_to_end_report.json
+e2e/end_to_end_report.md
+```
+
+Run the same loop for every case:
+
+```bash
+PYTHONPATH=/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Core/src \
+python3 -m lapis run-end-to-end-cases \
+  --tool-dir /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Tool \
+  --cases-root /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases \
+  --out-dir /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/e2e \
+  --uast-sdk-path /home/ubuntu/llm-yasa-repair/YASA-Engine-upstream/uast4py-linux-amd64
+```
+
+Hidden oracle files are optional and are read only by the final evaluation block
+through `--oracle` or `--oracle-root`. If no oracle exists, the report records
+`reported_without_oracle` or `not_reported_without_oracle` based on the final
+full-case YASA result.
 
 Expected routing:
 
@@ -56,7 +98,7 @@ connectivity_gap:
 propagation_gap:
   CVE-2024-36039 / PyMySQL -> CTPC
 
-mixed_case:
+mixed_case benchmark group:
   CVE-2025-55156 / pyLoad           -> CCEC first, then CTPC if still broken
   CVE-2026-24486 / python-multipart -> CCEC first, then CTPC if still broken
 
@@ -116,8 +158,12 @@ python3 -m lapis diagnose-gap \
 `evidence-gate` implements Step 1 of the repair workflow. It classifies a
 no-finding case as `candidate_fn`, `true_negative`, `safe_killed`,
 `infeasible`, `deferred`, or `already_reported`. `diagnose-gap` implements
-Step 2 and routes a `candidate_fn` to `connectivity_gap`, `propagation_gap`, or
-`mixed_case`.
+Step 2 and routes a `candidate_fn` to `connectivity_gap` or
+`propagation_gap`. When both connectivity and propagation evidence appear in
+baseline, it still reports `connectivity_gap` with
+`secondary_gap=possible_propagation_gap` and
+`needs_post_ccec_rediagnosis=true`; the mixed case is confirmed only after
+CCEC repair, rerun, and rediagnosis.
 
 Materialize a CTPC response:
 

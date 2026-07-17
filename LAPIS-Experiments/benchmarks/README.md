@@ -71,9 +71,9 @@ mixed_case
 
 | Gap type | Case | Repair branch | Notes |
 | --- | --- | --- | --- |
-| `connectivity_gap` | `cve-2024-27758-rpyc` | CCEC | Missing call edges from dynamic RPyC dispatch to unsafe deserialization. |
-| `propagation_gap` | `cve-2024-36039-pymysql` | CTPC | Reachable call context, but missing dict-key / percent-format taint propagation. |
-| `mixed_case` | `cve-2026-24486-python-multipart` | CCEC then CTPC | Missing callback connectivity and filename-to-path propagation. |
+| `connectivity_gap` | `cve-2024-27758-rpyc` | CCEC | Candidates must be inferred from baseline facts. |
+| `propagation_gap` | `cve-2024-36039-pymysql` | CTPC | Candidates must be inferred from baseline facts. |
+| `mixed_case` | `cve-2026-24486-python-multipart` | CCEC then CTPC | Candidates must be inferred from baseline facts. |
 
 ## Upload Checklist
 
@@ -83,8 +83,8 @@ For each benchmark case, upload:
 source/        project source snapshot
 poc/           safe PoC / driver
 rules/         YASA rule config
-manifest.json  metadata and expected baseline/repaired behavior
-README.md      brief explanation and run commands
+manifest.json  metadata required to run baseline scans
+README.md      brief blind-run explanation and run commands
 ```
 
 Do not place LAPIS generated outputs here. Generated files belong under

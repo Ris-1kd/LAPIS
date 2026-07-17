@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
 from typing import Any
@@ -9,124 +10,130 @@ from typing import Any
 from .prompt import _static_ccec_evidence
 
 
+CCEC_REQUIRED_SAMPLES = {
+    "must-link": "edge_present",
+    "must-not-link": "edge_absent",
+    "must-kill": "edge_suppressed",
+}
+
+
 def load_json(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
 
 
-def _candidate_templates(case: dict[str, Any]) -> list[dict[str, Any]]:
-    case_id = case.get("case_id")
-    gap_type = case.get("gap_type")
-    breakpoint = case.get("breakpoint") or {}
-    frontier = breakpoint.get("frontier") or []
-    kind = breakpoint.get("kind", "unknown")
-
-    if case_id == "cve-2024-27758-rpyc":
-        return [
-            {
-                "edge_id": "rpyc_getattr_array_to_generated_method",
-                "caller": "poc_cve_2024_27758_rpyc.array_callback",
-                "callsite": "getattr(obj, \"__array__\")",
-                "callee": "rpyc.core.netref._make_method.<generated __array__>",
-                "confidence": 0.78,
-                "guards": [
-                    "attribute_name == \"__array__\"",
-                    "receiver derives from BaseNetref",
-                    "class namespace contains ns[\"__array__\"] from _make_method",
-                ],
-                "evidence": frontier,
-            },
-            {
-                "edge_id": "rpyc_generated_array_to_pickle_loads",
-                "caller": "rpyc.core.netref._make_method.<generated __array__>",
-                "callsite": "pickle.loads(syncreq(...))",
-                "callee": "pickle.loads",
-                "confidence": 0.72,
-                "guards": [
-                    "generated method name == \"__array__\"",
-                    "syncreq returns remote pickle payload",
-                ],
-                "evidence": frontier,
-            },
-        ]
-
-    if case_id == "cve-2023-24816-ipython":
-        return [
-            {
-                "edge_id": "ipython_set_term_title_to_win32_fallback",
-                "caller": "IPython.utils.terminal.set_term_title",
-                "callsite": "_set_term_title(title)",
-                "callee": "IPython.utils.terminal._set_term_title.win32_fallback",
-                "confidence": 0.84,
-                "guards": [
-                    "global name _set_term_title rebound under sys.platform == \"win32\"",
-                    "argument title is forwarded unchanged",
-                ],
-                "evidence": frontier,
-            }
-        ]
-
-    if case_id == "cve-2026-24486-python-multipart":
-        return [
-            {
-                "edge_id": "multipart_write_to_on_start_callback",
-                "caller": "multipart.OctetStreamParser.write",
-                "callsite": "callbacks[\"on_start\"]()",
-                "callee": "multipart.FormParser.__init__.<locals>.on_start",
-                "confidence": 0.76,
-                "guards": [
-                    "callbacks contains key \"on_start\"",
-                    "parser.write reaches start event",
-                ],
-                "evidence": frontier,
-            },
-            {
-                "edge_id": "multipart_on_start_to_file_class",
-                "caller": "multipart.FormParser.__init__.<locals>.on_start",
-                "callsite": "FileClass(file_name, ...)",
-                "callee": "multipart.File.__init__",
-                "confidence": 0.7,
-                "guards": [
-                    "file_name captured by closure",
-                    "FileClass resolves to configured File class",
-                ],
-                "evidence": frontier,
-            },
-        ]
-
-    if case_id == "cve-2025-55156-pyload":
-        return [
-            {
-                "edge_id": "pyload_db_receiver_to_file_database_update",
-                "caller": "poc_cve_2025_55156_pyload.cve_2025_55156_driver",
-                "callsite": "db.update_link_info(data)",
-                "callee": "pyload.core.database.file_database.FileDatabase.update_link_info",
-                "confidence": 0.74,
-                "guards": [
-                    "receiver db is a FileDatabase-compatible database object",
-                    "argument data is forwarded unchanged",
-                ],
-                "evidence": frontier,
-            }
-        ]
-
-    if gap_type in {"connectivity_gap", "mixed_case"} and frontier:
-        return [
-            {
-                "edge_id": f"{case_id}_metadata_candidate_edge",
-                "caller": "unknown",
-                "callsite": frontier[0],
-                "callee": frontier[-1],
-                "confidence": 0.5,
-                "guards": [kind],
-                "evidence": frontier,
-            }
-        ]
-    return []
-
-
 def _module_hint(file_name: str) -> str:
     return file_name[:-3].replace("/", ".") if file_name.endswith(".py") else file_name.replace("/", ".")
+
+
+def _guard_text(guard: dict[str, Any]) -> str:
+    return str(guard.get("condition") or guard.get("guard") or "")
+
+
+def _guard_evidence_text(guard: dict[str, Any]) -> str:
+    evidence = guard.get("evidence") or {}
+    if not evidence:
+        return _guard_text(guard)
+    file_name = evidence.get("file")
+    line = evidence.get("line")
+    code = evidence.get("code")
+    if file_name and line and code:
+        return f"{file_name}:{line} guard {_guard_text(guard)} from {code}"
+    return _guard_text(guard)
+
+
+def _mode_profile(mode: str) -> dict[str, Any]:
+    profiles = {
+        "easy": {
+            "mechanism": "direct_static_edge",
+            "llm_role": "not_required",
+            "candidate_source": "single baseline-observed callsite and unique static callee evidence",
+            "repair_consumer": "real_or_rebound_call_edge",
+            "validation_strength": "structural plus minimal must-link/must-not-link",
+            "description": (
+                "Use deterministic static evidence to add one guarded call edge. "
+                "LLM may format explanations but must not invent candidates."
+            ),
+        },
+        "middle": {
+            "mechanism": "top_k_static_edges_then_llm_ranking",
+            "llm_role": "rank_candidates_and_refine_guards",
+            "candidate_source": "multiple static candidates from dynamic dispatch, rebinding, callbacks, or receiver uncertainty",
+            "repair_consumer": "guarded_real_or_rebound_call_edge",
+            "validation_strength": "structural plus must-link/must-not-link/must-kill",
+            "description": (
+                "Generate top-k candidates from static evidence, then ask LLM to rank, "
+                "select, and refine guards using only the supplied evidence."
+            ),
+        },
+        "hard": {
+            "mechanism": "llm_synthesized_virtual_or_materialized_edge",
+            "llm_role": "synthesize_dynamic_edge_contract_from_static_evidence",
+            "candidate_source": "factory/reflection/callback-table evidence without a directly materialized callee",
+            "repair_consumer": "virtual_or_materialized_edge_consumer",
+            "validation_strength": "strict must-link/must-not-link/must-kill plus rerun",
+            "description": (
+                "Use multi-source static evidence to synthesize a guarded dynamic, virtual, "
+                "or materialized call-edge contract. No benchmark chain oracle is allowed."
+            ),
+        },
+        "deferred": {
+            "mechanism": "insufficient_evidence",
+            "llm_role": "not_allowed_to_guess",
+            "candidate_source": "none",
+            "repair_consumer": "none",
+            "validation_strength": "none",
+            "description": "Do not generate CCEC candidates until baseline evidence is sufficient.",
+        },
+    }
+    return profiles.get(mode, profiles["deferred"])
+
+
+def _classify_ccec(evidence: dict[str, Any] | None, static_candidates: list[dict[str, Any]], top_k: int) -> dict[str, Any]:
+    evidence_kind = evidence.get("kind") if evidence else None
+    if evidence_kind == "dynamic_getattr_factory_method_evidence":
+        mode = "hard"
+        llm_required = True
+        generation_strategy = "baseline_static_evidence_then_llm_synthesis"
+        recommended_top_k = max(top_k, 5)
+        reason = [
+            "baseline evidence indicates dynamic getattr/factory materialization",
+            "callee may need virtual or materialized edge synthesis",
+            "candidate must be guarded by observed static factory/branch evidence",
+        ]
+    elif static_candidates and len(static_candidates) == 1:
+        mode = "easy"
+        llm_required = False
+        generation_strategy = "rule_static_single_edge"
+        recommended_top_k = 1
+        reason = [
+            "static evidence yields a single guarded candidate edge",
+            "callee can be selected by local AST evidence without LLM ranking",
+        ]
+    elif static_candidates:
+        mode = "middle"
+        llm_required = True
+        generation_strategy = "rule_top_k_then_llm_rank"
+        recommended_top_k = min(max(len(static_candidates), 3), top_k)
+        reason = [
+            "static evidence yields multiple plausible candidate edges",
+            "LLM ranking and guard refinement are required",
+        ]
+    else:
+        mode = "deferred"
+        llm_required = False
+        generation_strategy = "defer"
+        recommended_top_k = 0
+        reason = ["insufficient evidence to classify CCEC repair difficulty"]
+
+    return {
+        "mode": mode,
+        "profile": _mode_profile(mode),
+        "llm_required": llm_required,
+        "generation_strategy": generation_strategy,
+        "recommended_top_k": recommended_top_k,
+        "reason": reason,
+    }
 
 
 def _static_candidates(case: dict[str, Any]) -> list[dict[str, Any]]:
@@ -147,17 +154,37 @@ def _static_candidates(case: dict[str, Any]) -> list[dict[str, Any]]:
     for definition in evidence.get("candidate_definitions", []):
         if definition.get("function") != callee_symbol:
             continue
-        if not definition.get("contains_sink_callee"):
-            continue
-        guards = definition.get("guards") or []
-        sink_calls = definition.get("sink_calls") or []
+        branch_guards = definition.get("guards") or []
+        derived_guards = [
+            {
+                "condition": f"callsite callee symbol == {callee_symbol}",
+                "derived_from": "baseline_observed_callsite_ast",
+                "evidence": {
+                    "file": file_name,
+                    "line": callsite.get("line"),
+                    "code": callsite.get("expr"),
+                },
+            },
+            {
+                "condition": (
+                    "argument count compatible: "
+                    f"callsite={len(args)} callee={len(definition.get('args') or [])}"
+                ),
+                "derived_from": "callsite_and_candidate_signature",
+                "evidence": {
+                    "callsite_args": len(args),
+                    "callee_params": len(definition.get("args") or []),
+                    "callee_file": definition.get("file"),
+                    "callee_line": definition.get("line"),
+                },
+            },
+        ]
+        guard_objects = [*branch_guards, *derived_guards]
         evidence_items = [
             f"{file_name}:{callsite.get('line')} callsite {callsite.get('expr')}",
             f"{definition.get('file')}:{definition.get('line')} candidate def {definition.get('function')}",
         ]
-        evidence_items.extend(
-            f"{definition.get('file')}:{sink.get('line')} sink call {sink.get('expr')}" for sink in sink_calls
-        )
+        evidence_items.extend(_guard_evidence_text(guard) for guard in guard_objects)
         candidates.append(
             {
                 "edge_id": f"{case.get('case_id')}_{enclosing}_to_{callee_symbol}_line_{definition.get('line')}",
@@ -165,16 +192,13 @@ def _static_candidates(case: dict[str, Any]) -> list[dict[str, Any]]:
                 "callsite": callsite.get("expr"),
                 "callee": f"{definition.get('qualified_hint')}.line_{definition.get('line')}",
                 "callee_kind": "rebound_function",
-                "confidence": 0.86 if guards else 0.76,
-                "guards": guards
-                + [
-                    f"callsite callee symbol == {callee_symbol}",
-                    f"argument count compatible: callsite={len(args)} callee={len(definition.get('args') or [])}",
-                    "candidate body contains the configured sink callee",
-                ],
+                "repair_mechanism": "direct_static_edge",
+                "confidence": 0.86 if branch_guards else 0.76,
+                "guards": [_guard_text(guard) for guard in guard_objects],
+                "guard_evidence": guard_objects,
                 "evidence": evidence_items,
                 "contract": {
-                    "preconditions": guards + [f"observed callsite == {callsite.get('expr')}"],
+                    "preconditions": [_guard_text(guard) for guard in guard_objects],
                     "effects": [
                         {
                             "kind": "add_call_edge",
@@ -185,7 +209,8 @@ def _static_candidates(case: dict[str, Any]) -> list[dict[str, Any]]:
                     ],
                     "must_not_apply_when": [
                         "callee symbol does not match the observed callsite",
-                        "candidate body has no path toward the configured sink callee",
+                        "argument count is incompatible",
+                        "static branch guard evidence is not satisfied",
                     ],
                 },
             }
@@ -200,59 +225,25 @@ def plan_ccec_repair(case_path: Path, out_path: Path, top_k: int = 5) -> dict[st
     case = load_json(case_path)
     evidence = _static_ccec_evidence(case)
     static_candidates = _static_candidates(case)
-    metadata_difficulty = case.get("difficulty")
     evidence_kind = evidence.get("kind") if evidence else None
-
-    if evidence_kind == "dynamic_getattr_factory_method_evidence":
-        mode = "hard"
-        llm_required = True
-        generation_strategy = "llm_oracle_safe"
-        recommended_top_k = max(top_k, 5)
-        reason = [
-            "dynamic getattr is connected to a factory-generated method",
-            "candidate callee requires materialized/virtual method reasoning",
-            "multi-graph evidence is required: def-use, type/class graph, and sink backward hint",
-        ]
-    elif static_candidates and len(static_candidates) == 1:
-        mode = "easy"
-        llm_required = False
-        generation_strategy = "rule_static"
-        recommended_top_k = 1
-        reason = [
-            "static evidence yields a single guarded candidate edge",
-            "callee can be selected by local AST evidence without LLM ranking",
-        ]
-    elif static_candidates:
-        mode = "middle"
-        llm_required = True
-        generation_strategy = "rule_top_k_then_llm_rank"
-        recommended_top_k = min(max(len(static_candidates), 3), top_k)
-        reason = [
-            "rules can produce candidates but LLM ranking/guard selection is required",
-        ]
-    elif metadata_difficulty in {"easy", "middle", "hard"}:
-        mode = metadata_difficulty
-        llm_required = mode != "easy"
-        generation_strategy = "rule_static" if mode == "easy" else "llm_oracle_safe"
-        recommended_top_k = 1 if mode == "easy" else top_k
-        reason = [
-            "falling back to case metadata difficulty because static candidate extraction was inconclusive",
-        ]
-    else:
-        mode = "deferred"
-        llm_required = False
-        generation_strategy = "defer"
-        recommended_top_k = 0
-        reason = ["insufficient evidence to classify CCEC repair difficulty"]
+    classification = _classify_ccec(evidence, static_candidates, top_k)
+    mode = classification["mode"]
+    profile = classification["profile"]
+    llm_required = classification["llm_required"]
+    generation_strategy = classification["generation_strategy"]
+    recommended_top_k = classification["recommended_top_k"]
+    reason = classification["reason"]
 
     report = {
         "schema_version": "lapis.ccec_repair_plan.v1",
         "case_id": case.get("case_id"),
         "case": str(case_path),
-        "gap_type": case.get("gap_type"),
-        "repair_branch": case.get("repair_branch"),
+        "candidate_gap_type": "connectivity_gap",
+        "declared_case_group": case.get("gap_type"),
+        "declared_repair_branch": case.get("repair_branch"),
         "mode": mode,
-        "metadata_difficulty": metadata_difficulty,
+        "mode_profile": profile,
+        "metadata_difficulty": None,
         "llm_required": llm_required,
         "generation_strategy": generation_strategy,
         "top_k": recommended_top_k,
@@ -262,7 +253,7 @@ def plan_ccec_repair(case_path: Path, out_path: Path, top_k: int = 5) -> dict[st
             "observed_callsite": evidence.get("observed_callsite") if evidence else None,
             "candidate_definition_count": len(evidence.get("candidate_definitions", [])) if evidence else 0,
             "factory_call_count": len(evidence.get("factory_calls", [])) if evidence else 0,
-            "make_method_branch_count": len(evidence.get("make_method_branches", [])) if evidence else 0,
+            "factory_method_branch_count": len(evidence.get("factory_method_branches", [])) if evidence else 0,
             "dynamic_type_site_count": len(evidence.get("dynamic_type_sites", [])) if evidence else 0,
         },
         "next_steps": _plan_next_steps(mode, llm_required, generation_strategy),
@@ -270,7 +261,8 @@ def plan_ccec_repair(case_path: Path, out_path: Path, top_k: int = 5) -> dict[st
             "structural": "validate-ccec-candidates",
             "link_samples": "LLM generates must-link / must-not-link / must-kill",
             "link_validation": "validate-ccec-link-contract",
-            "consumer": "real edge injection or virtual edge consumer depending on callee_kind",
+            "consumer": profile["repair_consumer"],
+            "strength": profile["validation_strength"],
         },
         "reason": reason,
     }
@@ -282,11 +274,13 @@ def plan_ccec_repair(case_path: Path, out_path: Path, top_k: int = 5) -> dict[st
 def _plan_next_steps(mode: str, llm_required: bool, generation_strategy: str) -> list[str]:
     if mode == "deferred":
         return ["defer"]
-    steps = ["build_oracle_safe_evidence"]
-    if llm_required:
-        steps.extend(["build_ccec_prompt", "llm_generate_ccec_candidates"])
-    else:
+    steps = ["build_baseline_facts", "build_static_evidence_from_baseline"]
+    if mode == "easy":
         steps.append("generate_ccec_candidates_rule_only")
+    elif mode == "middle":
+        steps.extend(["generate_top_k_static_candidates", "build_ccec_prompt", "llm_rank_and_refine_guards"])
+    else:
+        steps.extend(["build_ccec_prompt", "llm_synthesize_dynamic_or_virtual_edge_contract"])
     steps.extend(
         [
             "validate_ccec_candidates",
@@ -295,8 +289,10 @@ def _plan_next_steps(mode: str, llm_required: bool, generation_strategy: str) ->
             "validate_ccec_link_contract",
         ]
     )
-    if generation_strategy == "rule_static":
+    if mode == "easy":
         steps.append("apply_real_or_rebound_edge")
+    elif mode == "middle":
+        steps.append("apply_guarded_ranked_edge")
     else:
         steps.append("apply_virtual_edge_consumer_if_needed")
     return steps
@@ -306,24 +302,38 @@ def build_ccec_candidates(
     case_path: Path,
     out_path: Path,
     top_k: int = 5,
-    strategy: str = "template",
+    strategy: str = "static",
 ) -> dict[str, Any]:
     case_path = case_path.resolve()
     case = load_json(case_path)
-    if strategy == "static":
-        candidates = _static_candidates(case)[:top_k]
-    elif strategy == "template":
-        candidates = sorted(_candidate_templates(case), key=lambda item: item["confidence"], reverse=True)[:top_k]
-    else:
+    if strategy != "static":
         raise ValueError(f"unknown CCEC generation strategy: {strategy}")
+    evidence = _static_ccec_evidence(case)
+    static_candidates = _static_candidates(case)
+    classification = _classify_ccec(evidence, static_candidates, top_k)
+    candidates = static_candidates[: classification["recommended_top_k"] or top_k]
+    for edge in candidates:
+        edge["ccec_mode"] = classification["mode"]
+        edge["repair_mechanism"] = edge.get("repair_mechanism") or classification["profile"]["mechanism"]
     report = {
         "schema_version": "lapis.ccec_candidates.v1",
         "case_id": case.get("case_id"),
         "case": str(case_path),
-        "gap_type": case.get("gap_type"),
-        "repair_branch": case.get("repair_branch"),
+        "candidate_gap_type": "connectivity_gap",
+        "declared_case_group": case.get("gap_type"),
+        "declared_repair_branch": case.get("repair_branch"),
+        "ccec_mode": classification["mode"],
+        "mode_profile": classification["profile"],
+        "llm_required": classification["llm_required"],
         "generation_strategy": strategy,
+        "routing_strategy": classification["generation_strategy"],
+        "static_candidate_count": len(static_candidates),
         "candidate_edges": candidates,
+        "generation_limits": {
+            "oracle_blind": True,
+            "candidate_source": classification["profile"]["candidate_source"],
+            "llm_role": classification["profile"]["llm_role"],
+        },
         "note": (
             "These are candidate call edges for CCEC validation. "
             "Three-way validation samples are generated by the validator stage, not stored in this candidate file."
@@ -340,7 +350,7 @@ def validate_ccec_candidates(candidates_path: Path, out_path: Path) -> dict[str,
     for edge in candidates.get("candidate_edges", []):
         missing = [
             key
-            for key in ("edge_id", "caller", "callsite", "callee", "guards", "evidence")
+            for key in ("edge_id", "caller", "callsite", "callee", "guards", "guard_evidence", "evidence")
             if not edge.get(key)
         ]
         confidence = float(edge.get("confidence", 0) or 0)
@@ -356,6 +366,7 @@ def validate_ccec_candidates(candidates_path: Path, out_path: Path) -> dict[str,
                     "has_callsite": bool(edge.get("callsite")),
                     "has_callee": bool(edge.get("callee")),
                     "has_guards": bool(edge.get("guards")),
+                    "has_guard_evidence": bool(edge.get("guard_evidence")),
                     "has_evidence": bool(edge.get("evidence")),
                     "has_positive_confidence": confidence > 0,
                 },
@@ -446,16 +457,11 @@ def validate_ccec_link_contract(validation_path: Path, candidates_path: Path, ou
         }
         for edge_id in sorted(candidate_edge_ids)
     ]
-    full_chain = validation.get("full_chain_expectation") or {}
-    full_chain_ok = bool(full_chain.get("callgraph_complete")) and isinstance(
-        full_chain.get("source_to_sink_chain"), list
-    )
     status = (
         "accepted"
         if sample_results
         and all(item["passed"] for item in sample_results)
         and all(item["covered"] for item in edge_coverage)
-        and full_chain_ok
         else "rejected"
     )
     report = {
@@ -466,10 +472,6 @@ def validate_ccec_link_contract(validation_path: Path, candidates_path: Path, ou
         "status": status,
         "sample_results": sample_results,
         "edge_coverage": edge_coverage,
-        "full_chain_check": {
-            "passed": full_chain_ok,
-            "full_chain_expectation": full_chain,
-        },
         "note": (
             "CCEC link validation checks LLM-generated must-link, must-not-link, "
             "and must-kill samples. It validates call-edge contracts, not CTPC dataflow."
@@ -480,60 +482,147 @@ def validate_ccec_link_contract(validation_path: Path, candidates_path: Path, ou
     return report
 
 
-def build_repaired_call_chain(case_path: Path, candidates_path: Path, out_path: Path) -> dict[str, Any]:
-    case = load_json(case_path.resolve())
-    candidates = load_json(candidates_path.resolve())
-    accepted_edges = candidates.get("candidate_edges", [])
-    source = case.get("source") or {}
-    sink = case.get("sink") or {}
-    breakpoint = case.get("breakpoint") or {}
-    frontier = breakpoint.get("frontier") or []
-    chain_nodes = []
+def _sample_key(name: str) -> str:
+    return name.replace("_", "-")
 
-    if source.get("expr"):
-        chain_nodes.append({"kind": "source", "node": source["expr"]})
-    for item in frontier:
-        chain_nodes.append({"kind": "frontier", "node": item})
-    for edge in accepted_edges:
-        chain_nodes.append(
+
+def _sample_from_response(response: dict[str, Any], sample_key: str) -> dict[str, Any]:
+    local_samples = response.get("local_samples") or {}
+    if isinstance(local_samples, dict):
+        sample = local_samples.get(sample_key) or local_samples.get(sample_key.replace("-", "_"))
+        if isinstance(sample, dict):
+            return sample
+
+    legacy_key = sample_key.replace("-", "_")
+    entries = response.get(legacy_key) or response.get(sample_key)
+    if isinstance(entries, list) and entries and isinstance(entries[0], dict):
+        return entries[0]
+    if isinstance(entries, dict):
+        return entries
+    raise ValueError(f"{sample_key} local sample is required")
+
+
+def materialize_ccec_validation(response_path: Path, out_dir: Path) -> dict[str, Path]:
+    """Write LLM-generated CCEC local validation samples to ccec-validation/."""
+
+    response = load_json(response_path.resolve())
+    validation_dir = out_dir / "ccec-validation"
+    validation_dir.mkdir(parents=True, exist_ok=True)
+    written: dict[str, Path] = {}
+
+    for sample_key, expected in CCEC_REQUIRED_SAMPLES.items():
+        sample = _sample_from_response(response, sample_key)
+        code = sample.get("code")
+        if not isinstance(code, str) or not code.strip():
+            raise ValueError(f"{sample_key}.code must be non-empty")
+        if sample.get("expected") != expected:
+            raise ValueError(f"{sample_key}.expected must be {expected!r}")
+        sample_dir = validation_dir / sample_key
+        sample_dir.mkdir(parents=True, exist_ok=True)
+        code_path = sample_dir / "case.py"
+        expected_path = sample_dir / "expected.json"
+        code_path.write_text(code.rstrip() + "\n", encoding="utf-8")
+        expected_path.write_text(
+            json.dumps(
+                {
+                    "name": sample.get("name", sample_key),
+                    "expected": expected,
+                    "edge_id": sample.get("edge_id"),
+                    "caller": sample.get("caller"),
+                    "callsite": sample.get("callsite"),
+                    "callee": sample.get("callee"),
+                    "guards": sample.get("guards", []),
+                    "violated_guard": sample.get("violated_guard"),
+                    "kill_condition": sample.get("kill_condition"),
+                    "evidence": sample.get("evidence", []),
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        written[f"{sample_key}_code"] = code_path
+        written[f"{sample_key}_expected"] = expected_path
+
+    return written
+
+
+def _syntax_ok(path: Path) -> tuple[bool, str | None]:
+    try:
+        ast.parse(path.read_text(encoding="utf-8"))
+        return True, None
+    except SyntaxError as error:
+        return False, str(error)
+
+
+def _matches_candidate(expected: dict[str, Any], candidates: dict[str, Any]) -> bool:
+    edges = candidates.get("candidate_edges", []) or []
+    edge_id = expected.get("edge_id")
+    caller = expected.get("caller")
+    callsite = expected.get("callsite")
+    callee = expected.get("callee")
+    for edge in edges:
+        if edge_id and edge.get("edge_id") == edge_id:
+            return True
+        if caller and callsite and callee:
+            if edge.get("caller") == caller and edge.get("callsite") == callsite and edge.get("callee") == callee:
+                return True
+    return False
+
+
+def validate_ccec_local_samples(validation_dir: Path, candidates_path: Path, out_path: Path) -> dict[str, Any]:
+    """Validate CCEC local semantic sample structure before YASA callgraph rerun."""
+
+    candidates = load_json(candidates_path.resolve())
+    sample_results = []
+    for sample_key, expected_value in CCEC_REQUIRED_SAMPLES.items():
+        sample_dir = validation_dir / sample_key
+        code_path = sample_dir / "case.py"
+        expected_path = sample_dir / "expected.json"
+        expected = load_json(expected_path) if expected_path.exists() else {"expected": expected_value}
+        syntax_ok, syntax_error = _syntax_ok(code_path) if code_path.exists() else (False, f"missing {code_path}")
+        target_covered = _matches_candidate(expected, candidates)
+        has_required_negative = True
+        if sample_key == "must-not-link":
+            has_required_negative = bool(expected.get("violated_guard"))
+        if sample_key == "must-kill":
+            has_required_negative = bool(expected.get("kill_condition"))
+        passed = (
+            expected.get("expected") == expected_value
+            and syntax_ok
+            and target_covered
+            and has_required_negative
+        )
+        sample_results.append(
             {
-                "kind": "repaired_call_edge",
-                "edge_id": edge.get("edge_id"),
-                "caller": edge.get("caller"),
-                "callsite": edge.get("callsite"),
-                "callee": edge.get("callee"),
-                "guards": edge.get("guards", []),
+                "sample": sample_key,
+                "expected": expected.get("expected"),
+                "syntax_ok": syntax_ok,
+                "syntax_error": syntax_error,
+                "target_covered": target_covered,
+                "has_required_negative_condition": has_required_negative,
+                "passed": passed,
+                "expected_file": str(expected_path),
+                "code_file": str(code_path),
             }
         )
-    if sink.get("expr"):
-        chain_nodes.append({"kind": "sink", "node": sink["expr"]})
 
-    has_source = bool(source.get("expr"))
-    has_sink = bool(sink.get("expr"))
-    has_repaired_edges = bool(accepted_edges)
-    if case.get("gap_type") == "connectivity_gap":
-        status = "complete" if has_source and has_sink and has_repaired_edges else "incomplete"
-    elif case.get("gap_type") == "mixed_case":
-        status = "call_edges_complete_dataflow_pending" if has_source and has_sink and has_repaired_edges else "incomplete"
-    else:
-        status = "not_applicable"
-
+    status = "accepted" if all(item["passed"] for item in sample_results) else "rejected"
     report = {
-        "schema_version": "lapis.ccec_repaired_call_chain.v1",
-        "case_id": case.get("case_id"),
-        "gap_type": case.get("gap_type"),
-        "repair_branch": case.get("repair_branch"),
+        "schema_version": "lapis.ccec_local_validation.v1",
+        "candidates": str(candidates_path.resolve()),
+        "validation_dir": str(validation_dir.resolve()),
         "status": status,
-        "complete_at_callgraph_level": status in {"complete", "call_edges_complete_dataflow_pending"},
-        "dataflow_still_required": case.get("gap_type") == "mixed_case",
-        "source": source,
-        "sink": sink,
-        "chain": chain_nodes,
-        "accepted_edges": accepted_edges,
-        "note": (
-            "This validates the repaired call-chain contract. "
-            "For mixed cases, CTPC must run after CCEC to prove dataflow reachability."
-        ),
+        "sample_results": sample_results,
+        "next_runner": {
+            "kind": "yasa-callgraph-in-the-loop",
+            "state": "ready_for_run_yasa_case_or_future_run_yasa_ccec_validation",
+            "purpose": (
+                "Run YASA with --lapisCcecFile and callgraph output, then check "
+                "edge_present/edge_absent/edge_suppressed expectations."
+            ),
+        },
     }
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

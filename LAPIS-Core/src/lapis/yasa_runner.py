@@ -393,14 +393,14 @@ def build_feasibility_report(
             "kind": "baseline_false_negative",
             "sample": "must-flow",
             "supported": must_flow.get("expected") == "finding" and must_flow.get("predicted") == "no_finding",
-            "detail": "Upstream YASA marks source and sink but misses the dict-key/access-path propagation chain.",
+            "detail": "Baseline YASA misses the positive validation flow that the CTPC is intended to recover.",
         },
         {
-            "kind": "baseline_risk_kind_confusion",
+            "kind": "baseline_negative_sample",
             "sample": "must-not-flow",
             "supported": must_not_flow.get("expected") == "no_finding"
             and must_not_flow.get("predicted") == "finding",
-            "detail": "Upstream YASA reports ordinary value taint even though the CTPC target is SQL structure risk from mapping keys.",
+            "detail": "The negative validation sample checks that the CTPC does not over-propagate.",
         },
         {
             "kind": "kill_sample_available",
@@ -438,11 +438,10 @@ def build_feasibility_report(
         "enhanced_yasa_report": str(enhanced_yasa_path) if enhanced_yasa_path else None,
         "observations": observations,
         "method_requirements": [
-            "Add guarded access-path propagation for dict key to mapping keys.",
-            "Preserve key taint through dict comprehensions that return the original key.",
-            "Propagate mapping-key SQL-structure risk through named percent-format operations.",
-            "Keep value taint separate from SQL-structure risk so must-not-flow remains no-finding.",
-            "Honor kill conditions such as key whitelist/rejection guards.",
+            "Apply only the propagation_edges present in the CTPC contract.",
+            "Apply only function_summaries present in the CTPC contract.",
+            "Honor all kill_conditions present in the CTPC contract.",
+            "Keep must-not-flow and must-kill samples no-finding after enhancement.",
         ],
         "next_acceptance_target": {
             "runner": "LAPIS-Tool enhanced YASA",

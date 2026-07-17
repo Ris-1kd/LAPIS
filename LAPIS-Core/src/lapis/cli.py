@@ -11,14 +11,16 @@ from typing import Any
 from .cases import build_case_index, run_repair_workflow
 from .ccec import (
     build_ccec_candidates,
-    build_repaired_call_chain,
+    materialize_ccec_validation,
     plan_ccec_repair,
     validate_ccec_candidates,
     validate_ccec_link_contract,
+    validate_ccec_local_samples,
 )
 from .ctpc_schema import upgrade_ctpc_file
 from .diagnosis import build_gap_diagnosis_report
-from .gate import build_evidence_gate_report
+from .e2e import run_end_to_end_case, run_end_to_end_cases
+from .gate import build_evidence_gate_report, summarize_callgraph
 from .prompt import build_ccec_prompt, build_ccec_validation_prompt, build_ctpc_prompt, build_validation_prompt
 from .validator import build_yasa_validation_rules, validate_ctpc
 from .yasa_runner import build_feasibility_report, run_yasa_case, run_yasa_validation
@@ -27,6 +29,13 @@ from .yasa_runner import build_feasibility_report, run_yasa_case, run_yasa_valid
 def _load_json(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def _resolve_case_value(case_dir: Path, value: str | None) -> Path | None:
+    if not value:
+        return None
+    path = Path(value)
+    return path if path.is_absolute() else case_dir / path
 
 
 def _read_line(path: Path, line: int) -> str:
@@ -176,9 +185,12 @@ def _extract_sink_backward(case_dir: Path, dataset_dir: Path, sink_anchor: dict[
     path = dataset_dir / sink_anchor["file"]
     module, text = _parse_python(path)
     function_names = [sink_anchor["function"]] if sink_anchor.get("function") else []
-    function_names.extend(name for name in ["execute", "mogrify", "_escape_args"] if name not in function_names)
+    if not function_names:
+        function_names = [node.name for node in ast.walk(module) if isinstance(node, ast.FunctionDef)]
     observations: list[dict[str, Any]] = []
     dependency_chain = [sink_anchor["expr"], sink_anchor["argument"]]
+    sink_terms = {str(sink_anchor.get("argument") or ""), str(sink_anchor.get("callee") or "")}
+    sink_terms = {term for term in sink_terms if term}
 
     for function_name in function_names:
         func = _find_function(module, function_name)
@@ -187,7 +199,8 @@ def _extract_sink_backward(case_dir: Path, dataset_dir: Path, sink_anchor: dict[
         for node in ast.walk(func):
             if isinstance(node, ast.Assign):
                 expr = _segment(text, node)
-                if "query" in _names_in(node) or "args" in _names_in(node):
+                names = _names_in(node)
+                if not sink_terms or names.intersection(sink_terms) or any(term in expr for term in sink_terms):
                     observations.append(
                         {
                             "kind": "assignment",
@@ -198,11 +211,11 @@ def _extract_sink_backward(case_dir: Path, dataset_dir: Path, sink_anchor: dict[
                             "expr": expr,
                         }
                     )
-                    if "query %" in expr or "% self._escape_args" in expr:
+                    if "%" in expr:
                         dependency_chain.append(expr)
             elif isinstance(node, ast.Return):
                 expr = _segment(text, node)
-                if isinstance(node.value, ast.DictComp) and "args.items()" in expr:
+                if isinstance(node.value, ast.DictComp) and ".items()" in expr:
                     observations.append(
                         {
                             "kind": "dict_comprehension_return",
@@ -213,8 +226,8 @@ def _extract_sink_backward(case_dir: Path, dataset_dir: Path, sink_anchor: dict[
                         }
                     )
                     dependency_chain.append(expr)
-                    dependency_chain.append("args.items()")
-                    dependency_chain.append("args.keys()[*]")
+                    dependency_chain.append("mapping.items()")
+                    dependency_chain.append("mapping.keys()[*]")
 
     return {
         "sink": sink_anchor["expr"],
@@ -237,7 +250,7 @@ def _extract_structure(forward: dict[str, Any], backward: dict[str, Any]) -> dic
         "assignments": assignments,
         "dict_comprehensions": dict_comprehensions,
         "format_operations": [
-            item for item in assignments if "% self._escape_args" in item["expr"] or "query %" in item["expr"]
+            item for item in assignments if "%" in item["expr"]
         ],
     }
 
@@ -246,11 +259,14 @@ def _generate_candidate_edges(structure: dict[str, Any]) -> list[dict[str, Any]]
     edges: list[dict[str, Any]] = []
 
     for item in structure["dict_literals"]:
-        if "key" in item.get("keys", []):
+        lhs = item.get("lhs")
+        for key in item.get("keys", []):
+            if not lhs or not key or key.startswith(("'", '"')):
+                continue
             edges.append(
                 {
-                    "from": "key",
-                    "to": f"{item['lhs']}.keys()[*]",
+                    "from": key,
+                    "to": f"{lhs}.keys()[*]",
                     "kind": "dict_literal_key",
                     "score": 0.92,
                     "evidence": item["expr"],
@@ -259,31 +275,243 @@ def _generate_candidate_edges(structure: dict[str, Any]) -> list[dict[str, Any]]
             )
 
     for item in structure["dict_comprehensions"]:
-        if "for (key, val) in args.items()" in item["expr"]:
-            edges.append(
-                {
-                    "from": "args.keys()[*]",
-                    "to": "escaped_args.keys()[*]",
-                    "kind": "dict_comprehension_key_preserved",
-                    "score": 0.88,
-                    "evidence": item["expr"],
-                    "location": f"{item['file']}:{item['line']}",
-                }
-            )
-
-    for item in structure["format_operations"]:
         edges.append(
             {
-                "from": "escaped_args.keys()[*]",
-                "to": "query",
+                "from": "input_mapping.keys()[*]",
+                "to": "returned_mapping.keys()[*]",
+                "kind": "dict_comprehension_key_preserved",
+                "score": 0.72,
+                "evidence": item["expr"],
+                "location": f"{item['file']}:{item['line']}",
+            }
+        )
+
+    for item in structure["format_operations"]:
+        targets = item.get("targets") or []
+        target = targets[0] if targets else "formatted_value"
+        edges.append(
+            {
+                "from": "format_mapping.keys()[*]",
+                "to": target,
                 "kind": "named_percent_format_mapping_key",
-                "score": 0.83,
+                "score": 0.70,
                 "evidence": item["expr"],
                 "location": f"{item['file']}:{item['line']}",
             }
         )
 
     return sorted(edges, key=lambda item: item["score"], reverse=True)
+
+
+def _flatten_rule_config(rule_config: list[dict[str, Any]]) -> dict[str, Any]:
+    sources: list[dict[str, Any]] = []
+    sinks: list[dict[str, Any]] = []
+    entrypoints: list[dict[str, Any]] = []
+    checker_ids: list[str] = []
+
+    for rule in rule_config or []:
+        checker_ids.extend(str(item) for item in rule.get("checkerIds", []) or [])
+        for source_kind, items in (rule.get("sources") or {}).items():
+            for item in items or []:
+                sources.append(
+                    {
+                        "kind": source_kind,
+                        "fsig": item.get("fsig"),
+                        "values": item.get("values", []),
+                        "scopeFile": item.get("scopeFile"),
+                        "scopeFunc": item.get("scopeFunc"),
+                    }
+                )
+        for sink_kind, items in (rule.get("sinks") or {}).items():
+            for item in items or []:
+                sinks.append(
+                    {
+                        "kind": sink_kind,
+                        "fsig": item.get("fsig"),
+                        "args": item.get("args", []),
+                        "attribute": item.get("attribute"),
+                    }
+                )
+        for item in rule.get("entrypoints", []) or []:
+            entrypoints.append(
+                {
+                    "filePath": item.get("filePath"),
+                    "functionName": item.get("functionName"),
+                    "attribute": item.get("attribute"),
+                }
+            )
+
+    return {
+        "checker_ids": sorted(set(checker_ids)),
+        "sources": sources,
+        "sinks": sinks,
+        "entrypoints": entrypoints,
+    }
+
+
+def _diagnostics_facts(path: Path | None, max_samples: int = 20) -> dict[str, Any]:
+    if not path or not path.exists():
+        return {"available": False, "path": str(path) if path else None, "log_key_counts": {}, "samples": []}
+    counts: dict[str, int] = {}
+    samples: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        key = str(item.get("log_key"))
+        counts[key] = counts.get(key, 0) + 1
+        if len(samples) < max_samples:
+            samples.append(
+                {
+                    "log_key": item.get("log_key"),
+                    "log_time": item.get("log_time"),
+                    "string1": item.get("string1"),
+                    "string2": item.get("string2"),
+                    "number1": item.get("number1"),
+                    "number2": item.get("number2"),
+                    "number3": item.get("number3"),
+                }
+            )
+    return {"available": True, "path": str(path), "log_key_counts": counts, "samples": samples}
+
+
+def _sarif_facts(path: Path | None, max_results: int = 10) -> dict[str, Any]:
+    if not path or not path.exists():
+        return {"available": False, "path": str(path) if path else None, "result_count": 0, "results": []}
+    sarif = _load_json(path)
+    results: list[dict[str, Any]] = []
+    for run in sarif.get("runs", []) or []:
+        for result in run.get("results", []) or []:
+            locations = []
+            for location in result.get("locations", []) or []:
+                physical = location.get("physicalLocation", {}) if isinstance(location, dict) else {}
+                artifact = physical.get("artifactLocation", {}) if isinstance(physical, dict) else {}
+                region = physical.get("region", {}) if isinstance(physical, dict) else {}
+                locations.append(
+                    {
+                        "uri": artifact.get("uri"),
+                        "startLine": region.get("startLine"),
+                        "snippet": (region.get("snippet") or {}).get("text") if isinstance(region, dict) else None,
+                    }
+                )
+            if len(results) < max_results:
+                results.append(
+                    {
+                        "level": result.get("level"),
+                        "message": (result.get("message") or {}).get("text"),
+                        "locations": locations,
+                    }
+                )
+    return {"available": True, "path": str(path), "result_count": len(results), "results": results}
+
+
+def build_baseline_facts(
+    out_path: Path,
+    case_path: Path | None = None,
+    baseline_summary_path: Path | None = None,
+    diagnostics_path: Path | None = None,
+    sarif_path: Path | None = None,
+    callgraph_path: Path | None = None,
+    include_rule_config: bool = False,
+) -> dict[str, Any]:
+    case: dict[str, Any] = {}
+    case_dir: Path | None = None
+    if case_path is not None:
+        case_path = case_path.resolve()
+        case_dir = case_path.parent
+        case = _load_json(case_path)
+        baseline_summary_path = baseline_summary_path or _resolve_case_value(case_dir, case.get("baseline_summary"))
+
+    if baseline_summary_path is None:
+        raise ValueError("baseline summary is required")
+    baseline_summary_path = baseline_summary_path.resolve()
+    baseline = _load_json(baseline_summary_path)
+    baseline_dir = baseline_summary_path.parent
+    diagnostics_path = diagnostics_path or baseline_dir / "yasa-diagnostics-log.txt"
+    sarif_path = sarif_path or baseline_dir / "report.sarif"
+    callgraph_path = callgraph_path or baseline_dir / "callgraph.json"
+    full_rule_facts = _flatten_rule_config(baseline.get("ruleConfig", []) or [])
+    rule_facts = (
+        full_rule_facts
+        if include_rule_config
+        else {
+            "included": False,
+            "source_rule_count": len(full_rule_facts["sources"]),
+            "sink_rule_count": len(full_rule_facts["sinks"]),
+            "entrypoint_rule_count": len(full_rule_facts["entrypoints"]),
+            "note": (
+                "Rule signatures are analyzer configuration, not baseline-observed facts. "
+                "They are hidden by default to avoid leaking manual boundary hints."
+            ),
+        }
+    )
+
+    facts = {
+        "schema_version": "lapis.baseline_facts.v1",
+        "oracle_blind": True,
+        "case": {
+            "case_id": case.get("case_id"),
+            "project": case.get("project"),
+            "case_path": str(case_path) if case_path else None,
+            "note": (
+                "case.json is used only to locate baseline artifacts and non-oracle identifiers; "
+                "source/sink/breakpoint/frontier fields are not read."
+            ),
+        },
+        "artifacts": {
+            "baseline_summary": str(baseline_summary_path),
+            "diagnostics": str(diagnostics_path) if diagnostics_path else None,
+            "sarif": str(sarif_path) if sarif_path else None,
+            "callgraph": str(callgraph_path) if callgraph_path else None,
+        },
+        "scan": {
+            "projectName": baseline.get("projectName"),
+            "projectPath": baseline.get("projectPath"),
+            "yasaVersion": baseline.get("yasaVersion"),
+            "language": baseline.get("language"),
+            "findingCount": baseline.get("findingCount", 0),
+            "markedSourceCount": baseline.get("markedSourceCount", 0),
+            "matchedSinkCount": baseline.get("matchedSinkCount", 0),
+            "entryPointCount": baseline.get("entryPointCount", 0),
+            "fileCount": baseline.get("fileCount", 0),
+            "lineCount": baseline.get("lineCount", 0),
+            "totalTimeMs": baseline.get("totalTimeMs", 0),
+            "dumpAllCG": baseline.get("dumpAllCG"),
+            "cgAlgorithm": baseline.get("cgAlgorithm"),
+        },
+        "rule_config_facts": rule_facts,
+        "diagnostics_facts": _diagnostics_facts(diagnostics_path),
+        "sarif_facts": _sarif_facts(sarif_path),
+        "callgraph_facts": summarize_callgraph(callgraph_path),
+        "known_public_conclusion": {
+            "source_observed": int(baseline.get("markedSourceCount", 0) or 0) > 0,
+            "sink_observed": int(baseline.get("matchedSinkCount", 0) or 0) > 0,
+            "finding_observed": int(baseline.get("findingCount", 0) or 0) > 0,
+            "repair_candidate_if_no_finding": (
+                int(baseline.get("markedSourceCount", 0) or 0) > 0
+                and int(baseline.get("matchedSinkCount", 0) or 0) > 0
+                and int(baseline.get("findingCount", 0) or 0) == 0
+            ),
+        },
+        "omitted_oracle_fields": [
+            "case.source",
+            "case.sink",
+            "case.breakpoint",
+            "case.breakpoint.frontier",
+            "case.expected_repair_order",
+            "case.references",
+            "rule_config_facts.sources[].fsig",
+            "rule_config_facts.sinks[].fsig",
+            "candidate_edges seeded from case_id",
+            "manual CTPC/CCEC answers",
+        ],
+    }
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(facts, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return facts
 
 
 def _baseline_status(summary: dict[str, Any]) -> dict[str, Any]:
@@ -299,154 +527,63 @@ def _baseline_status(summary: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _mixed_candidate_edges(case: dict[str, Any]) -> list[dict[str, Any]]:
-    case_id = case.get("case_id")
-    if case_id == "cve-2025-55156-pyload":
-        return [
-            {
-                "from": "url",
-                "to": "data[*][3]",
-                "kind": "tuple_list_element",
-                "score": 0.9,
-                "evidence": 'data = [("name", 1, 2, url)]',
-                "location": "poc/poc_cve_2025_55156_pyload.py:17",
-            },
-            {
-                "from": "data[*][3]",
-                "to": "statuses",
-                "kind": "generator_tuple_index_join",
-                "score": 0.86,
-                "evidence": 'statuses = "\',\'".join(x[3] for x in data)',
-                "location": "src/pyload/core/database/file_database.py:270",
-            },
-            {
-                "from": "statuses",
-                "to": "SQL f-string",
-                "kind": "fstring_sql_interpolation",
-                "score": 0.84,
-                "evidence": 'self.c.execute(f"SELECT id FROM links WHERE url IN (\'{statuses}\')")',
-                "location": "src/pyload/core/database/file_database.py:271",
-            },
-        ]
-    if case_id == "cve-2026-24486-python-multipart":
-        return [
-            {
-                "from": "filename",
-                "to": "FormParser.file_name",
-                "kind": "constructor_keyword_capture",
-                "score": 0.88,
-                "evidence": "FormParser(..., file_name=filename, config=config)",
-                "location": "poc/poc_cve_2026_24486_python_multipart.py:16",
-            },
-            {
-                "from": "FormParser.file_name",
-                "to": "File.__init__.file_name",
-                "kind": "closure_capture_to_constructor_arg",
-                "score": 0.84,
-                "evidence": 'file = FileClass(file_name, None, config=cast("FileConfig", self.config))',
-                "location": "python_multipart/multipart.py:1558",
-            },
-            {
-                "from": "File.__init__.file_name",
-                "to": "path",
-                "kind": "path_join_keep_filename",
-                "score": 0.8,
-                "evidence": 'path = os.path.join(upload_dir, fname)',
-                "location": "python_multipart/multipart.py:477",
-            },
-            {
-                "from": "path",
-                "to": "open(path)",
-                "kind": "filesystem_sink_argument",
-                "score": 0.78,
-                "evidence": 'tmp_file = open(path, "w+b")',
-                "location": "python_multipart/multipart.py:478",
-            },
-        ]
-    return []
-
-
-def _build_mixed_evidence(
+def _build_oracle_blind_mixed_evidence(
     case: dict[str, Any],
-    case_dir: Path,
-    dataset_dir: Path,
     baseline: dict[str, Any],
     source: dict[str, Any],
     sink: dict[str, Any],
-    top_k: int,
 ) -> dict[str, Any]:
-    frontier = (case.get("breakpoint") or {}).get("frontier") or []
-    candidate_edges = _mixed_candidate_edges(case)
     baseline = _baseline_status(baseline)
     return {
         "case_id": case["case_id"],
         "project": case["project"],
         "affected_version": case["affected_version"],
         "vulnerability": case["vulnerability"],
-        "gap_type": case.get("gap_type"),
-        "repair_branch": case.get("repair_branch"),
+        "declared_case_group": case.get("gap_type"),
+        "declared_repair_branch": case.get("repair_branch"),
         "baseline_status": baseline,
         "source": source,
         "sink": sink,
         "source_forward_slice": {
             "source": source.get("symbol"),
-            "reached": [source.get("symbol"), *frontier],
-            "frontier": frontier[-1] if frontier else source.get("symbol"),
-            "observations": [
-                {
-                    "kind": "mixed_frontier",
-                    "file": _safe_relative(dataset_dir / source["file"], case_dir),
-                    "line": source.get("line"),
-                    "expr": item,
-                }
-                for item in frontier
-            ],
+            "reached": [source.get("symbol")],
+            "frontier": source.get("symbol"),
+            "observations": [],
         },
         "sink_backward_slice": {
             "sink": sink.get("expr"),
             "argument": sink.get("argument"),
-            "dependency_chain": [sink.get("argument"), *reversed(frontier)],
-            "observations": [
-                {
-                    "kind": "mixed_sink_dependency",
-                    "file": _safe_relative(dataset_dir / sink["file"], case_dir),
-                    "line": sink.get("line"),
-                    "expr": item,
-                }
-                for item in frontier
-            ],
+            "dependency_chain": [sink.get("argument")] if sink.get("argument") else [],
+            "observations": [],
         },
-        "local_structure_evidence": {
-            "mixed_frontier": frontier,
-            "ccec_required_before_ctpc": True,
-            "ctpc_candidate_kinds": [edge["kind"] for edge in candidate_edges],
-        },
+        "local_structure_evidence": {},
         "local_convergence": {
-            "object": "mixed_after_ccec_frontier",
-            "access_path": candidate_edges[-1]["to"] if candidate_edges else None,
-            "source_frontier": frontier[0] if frontier else source.get("symbol"),
+            "object": None,
+            "access_path": None,
+            "source_frontier": source.get("symbol"),
             "sink_dependency_node": sink.get("argument"),
-            "is_converged": bool(candidate_edges),
+            "is_converged": False,
         },
-        "candidate_edges": candidate_edges,
-        "top_k_edges": candidate_edges[:top_k],
+        "candidate_edges": [],
+        "top_k_edges": [],
         "verdict": {
-            "is_access_path_gap_candidate": (
-                baseline["source_hit"] and not baseline["complete_taint_path_found"] and bool(candidate_edges)
-            ),
-            "gap_type": [
-                "mixed case data propagation after repaired call edges",
-                "candidate propagation obligations must be mapped into CTPC by LLM",
-            ],
+            "is_access_path_gap_candidate": False,
+            "gap_type": ["mixed case requires oracle-blind CCEC evidence before CTPC synthesis"],
             "summary": (
-                "CCEC repairs the call chain first; these ranked propagation candidates describe "
-                "the remaining dataflow obligations needed to reach the final sink."
+                "Oracle-blind mode hides benchmark breakpoint/frontier chains. "
+                "Run callgraph/source-slice evidence extraction first, then synthesize CCEC/CTPC "
+                "from observed analyzer evidence only."
             ),
         },
+        "oracle_blind": True,
     }
 
 
-def build_evidence(case_path: Path, out_path: Path, top_k: int = 3) -> dict[str, Any]:
+def build_evidence(
+    case_path: Path,
+    out_path: Path,
+    top_k: int = 3,
+) -> dict[str, Any]:
     case_path = case_path.resolve()
     case_dir = case_path.parent
     case = _load_json(case_path)
@@ -456,7 +593,7 @@ def build_evidence(case_path: Path, out_path: Path, top_k: int = 3) -> dict[str,
     source = _with_observed_line(case_dir, dataset_dir, case["source"])
     sink = _with_observed_line(case_dir, dataset_dir, case["sink"])
     if case.get("gap_type") == "mixed_case":
-        evidence = _build_mixed_evidence(case, case_dir, dataset_dir, baseline, source, sink, top_k)
+        evidence = _build_oracle_blind_mixed_evidence(case, baseline, source, sink)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(json.dumps(evidence, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         return evidence
@@ -466,15 +603,20 @@ def build_evidence(case_path: Path, out_path: Path, top_k: int = 3) -> dict[str,
     structure = _extract_structure(source_forward_slice, sink_backward_slice)
     candidate_edges = _generate_candidate_edges(structure)
     top_k_edges = candidate_edges[:top_k]
+    candidate_access_paths = sorted(
+        {
+            value
+            for edge in candidate_edges
+            for value in (edge.get("from"), edge.get("to"))
+            if isinstance(value, str) and value
+        }
+    )
     local_convergence = {
-        "object": "args",
-        "access_path": "args.keys()[*]",
+        "object": None,
+        "access_path": candidate_access_paths[0] if candidate_access_paths else None,
         "source_frontier": source_forward_slice["frontier"],
-        "sink_dependency_node": "args.keys()[*]"
-        if "args.keys()[*]" in sink_backward_slice["dependency_chain"]
-        else None,
-        "is_converged": source_forward_slice["frontier"] == "key"
-        and "args.keys()[*]" in sink_backward_slice["dependency_chain"],
+        "sink_dependency_node": None,
+        "is_converged": bool(candidate_edges),
     }
 
     baseline_status = _baseline_status(baseline)
@@ -486,14 +628,10 @@ def build_evidence(case_path: Path, out_path: Path, top_k: int = 3) -> dict[str,
             and baseline_status["call_context_reachable"]
             and not baseline_status["complete_taint_path_found"]
         ),
-        "gap_type": [
-            "dict-key taint propagation",
-            "dict-comprehension key preservation",
-            "named-placeholder percent-format propagation",
-        ],
+        "gap_type": sorted({edge["kind"] for edge in candidate_edges}) or ["access-path propagation"],
         "summary": (
             "Source and final sink are both observed by baseline YASA, but no taint "
-            "finding is produced. The local convergence is at args.keys()[*]."
+            "finding is produced. Candidate CTPC obligations are derived from local static structure."
         ),
     }
 
@@ -575,13 +713,9 @@ def plan_ctpc_repair(evidence_path: Path, out_path: Path, top_k: int = 5) -> dic
 
 def materialize_ctpc(response_path: Path, out_dir: Path) -> dict[str, Path]:
     ctpc = _load_json(response_path)
-    if ctpc.get("schema_version") == "ctpc.v2":
-        required = ["contract_name", "applies_to", "fact_types", "propagation_edges", "kill_conditions"]
-    else:
-        required = ["contract_name", "propagation_edges", "structural_guards"]
-    for key in required:
-        if key not in ctpc:
-            raise ValueError(f"CTPC response must contain {key!r}")
+    from .ctpc_schema import validate_ctpc_v2
+
+    validate_ctpc_v2(ctpc)
     ctpc_dir = out_dir / "ctpc"
     ctpc_dir.mkdir(parents=True, exist_ok=True)
     ctpc_path = ctpc_dir / "ctpc.json"
@@ -642,6 +776,22 @@ def main() -> None:
     build.add_argument("--out", required=True, type=Path, help="Output evidence_pack.json")
     build.add_argument("--top-k", default=3, type=int, help="Top-K propagation candidates to include")
 
+    baseline_facts_cmd = subparsers.add_parser(
+        "build-baseline-facts",
+        help="Build an oracle-blind fact pack from YASA baseline artifacts",
+    )
+    baseline_facts_cmd.add_argument("--out", required=True, type=Path, help="Output baseline_facts.json")
+    baseline_facts_cmd.add_argument("--case", type=Path, help="Optional case.json used only to locate artifacts")
+    baseline_facts_cmd.add_argument("--baseline-summary", type=Path, help="Path to baseline scan_summary.json")
+    baseline_facts_cmd.add_argument("--diagnostics", type=Path, help="Optional yasa-diagnostics-log.txt")
+    baseline_facts_cmd.add_argument("--sarif", type=Path, help="Optional baseline report.sarif")
+    baseline_facts_cmd.add_argument("--callgraph", type=Path, help="Optional baseline callgraph.json")
+    baseline_facts_cmd.add_argument(
+        "--include-rule-config",
+        action="store_true",
+        help="Include analyzer rule signatures; hidden by default because they may encode manual hints",
+    )
+
     gate_cmd = subparsers.add_parser(
         "evidence-gate",
         help="Run Step 1 Evidence Gate for a no-finding candidate case",
@@ -650,6 +800,7 @@ def main() -> None:
     gate_cmd.add_argument("--out", required=True, type=Path, help="Output evidence_gate_report.json")
     gate_cmd.add_argument("--evidence", type=Path, help="Optional existing evidence_pack.json")
     gate_cmd.add_argument("--callgraph", type=Path, help="Optional callgraph.json")
+    gate_cmd.add_argument("--baseline-summary", type=Path, help="Optional scan_summary.json for rerun rediagnosis")
 
     diagnosis_cmd = subparsers.add_parser(
         "diagnose-gap",
@@ -672,6 +823,30 @@ def main() -> None:
     workflow_cmd.add_argument("--cases-root", required=True, type=Path, help="Path to LAPIS-Experiments/cases")
     workflow_cmd.add_argument("--out", required=True, type=Path, help="Output workflow_report.json")
 
+    e2e_case_cmd = subparsers.add_parser(
+        "run-end-to-end-case",
+        help="Run baseline, CCEC rerun, rediagnosis, optional CTPC rerun, and final evaluation for one case",
+    )
+    e2e_case_cmd.add_argument("--tool-dir", required=True, type=Path, help="YASA/LAPIS-Tool directory")
+    e2e_case_cmd.add_argument("--case", required=True, type=Path, help="Path to case.json")
+    e2e_case_cmd.add_argument("--out-dir", required=True, type=Path, help="Output directory for the E2E report")
+    e2e_case_cmd.add_argument("--uast-sdk-path", required=True, type=Path, help="Path to uast4py binary")
+    e2e_case_cmd.add_argument("--timeout-seconds", default=180, type=int, help="Timeout per full-case run")
+    e2e_case_cmd.add_argument("--checker-ids", default="taint_flow_python_input_inner", help="Checker IDs for YASA")
+    e2e_case_cmd.add_argument("--oracle", type=Path, help="Optional hidden oracle JSON, read only during final evaluation")
+
+    e2e_cases_cmd = subparsers.add_parser(
+        "run-end-to-end-cases",
+        help="Run the full E2E repair loop for every case under a cases root",
+    )
+    e2e_cases_cmd.add_argument("--tool-dir", required=True, type=Path, help="YASA/LAPIS-Tool directory")
+    e2e_cases_cmd.add_argument("--cases-root", required=True, type=Path, help="Path to LAPIS-Experiments/cases")
+    e2e_cases_cmd.add_argument("--out-dir", required=True, type=Path, help="Output directory for suite reports")
+    e2e_cases_cmd.add_argument("--uast-sdk-path", required=True, type=Path, help="Path to uast4py binary")
+    e2e_cases_cmd.add_argument("--timeout-seconds", default=180, type=int, help="Timeout per full-case run")
+    e2e_cases_cmd.add_argument("--checker-ids", default="taint_flow_python_input_inner", help="Checker IDs for YASA")
+    e2e_cases_cmd.add_argument("--oracle-root", type=Path, help="Optional directory of hidden oracle JSON files by case_id")
+
     ccec_cmd = subparsers.add_parser(
         "generate-ccec-candidates",
         help="Generate candidate call edges for one Connectivity Gap or Mixed Case",
@@ -681,8 +856,8 @@ def main() -> None:
     ccec_cmd.add_argument("--top-k", default=5, type=int, help="Maximum number of candidates")
     ccec_cmd.add_argument(
         "--strategy",
-        choices=("template", "static"),
-        default="template",
+        choices=("static",),
+        default="static",
         help="Candidate generation strategy",
     )
 
@@ -702,6 +877,7 @@ def main() -> None:
     ccec_prompt.add_argument(
         "--oracle-safe",
         action="store_true",
+        default=True,
         help="Omit benchmark-oracle chain fields from the CCEC prompt",
     )
 
@@ -732,13 +908,24 @@ def main() -> None:
     ccec_link_validation_cmd.add_argument("--candidates", required=True, type=Path, help="Path to CCEC candidates")
     ccec_link_validation_cmd.add_argument("--out", required=True, type=Path, help="Output validation report")
 
-    repaired_chain_cmd = subparsers.add_parser(
-        "build-repaired-call-chain",
-        help="Materialize and validate the repaired source-to-sink call chain from CCEC candidates",
+    materialize_ccec_validation_cmd = subparsers.add_parser(
+        "materialize-ccec-validation",
+        help="Write CCEC must-link/must-not-link/must-kill local code samples from response JSON",
     )
-    repaired_chain_cmd.add_argument("--case", required=True, type=Path, help="Path to case.json")
-    repaired_chain_cmd.add_argument("--candidates", required=True, type=Path, help="Path to candidate_edges.json")
-    repaired_chain_cmd.add_argument("--out", required=True, type=Path, help="Output repaired_call_chain.json")
+    materialize_ccec_validation_cmd.add_argument(
+        "--response", required=True, type=Path, help="Path to CCEC validation response JSON"
+    )
+    materialize_ccec_validation_cmd.add_argument("--out-dir", required=True, type=Path, help="Case output directory")
+
+    validate_ccec_local_cmd = subparsers.add_parser(
+        "validate-ccec-local",
+        help="Validate materialized CCEC local semantic samples before callgraph rerun",
+    )
+    validate_ccec_local_cmd.add_argument(
+        "--validation-dir", required=True, type=Path, help="Directory with CCEC local samples"
+    )
+    validate_ccec_local_cmd.add_argument("--candidates", required=True, type=Path, help="Path to CCEC candidates")
+    validate_ccec_local_cmd.add_argument("--out", required=True, type=Path, help="Output CCEC local validation report")
 
     ctpc_prompt = subparsers.add_parser("build-ctpc-prompt", help="Build a CTPC prompt from an Evidence Pack")
     ctpc_prompt.add_argument("--evidence", required=True, type=Path, help="Path to evidence_pack.json")
@@ -766,9 +953,9 @@ def main() -> None:
 
     upgrade_ctpc_cmd = subparsers.add_parser(
         "upgrade-ctpc-v2",
-        help="Upgrade a legacy CTPC JSON file to structured CTPC v2",
+        help="Validate and write a structured CTPC v2 JSON file",
     )
-    upgrade_ctpc_cmd.add_argument("--ctpc", required=True, type=Path, help="Input CTPC JSON")
+    upgrade_ctpc_cmd.add_argument("--ctpc", required=True, type=Path, help="Input CTPC v2 JSON")
     upgrade_ctpc_cmd.add_argument("--out", required=True, type=Path, help="Output CTPC v2 JSON")
 
     materialize_validation_cmd = subparsers.add_parser(
@@ -844,7 +1031,11 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.command == "build-evidence":
-        evidence = build_evidence(args.case, args.out, args.top_k)
+        evidence = build_evidence(
+            args.case,
+            args.out,
+            args.top_k,
+        )
         status = evidence["baseline_status"]
         verdict = evidence["verdict"]
         print(f"case_id={evidence['case_id']}")
@@ -857,8 +1048,35 @@ def main() -> None:
         print(f"access_path_gap_candidate={verdict['is_access_path_gap_candidate']}")
         print(f"top_k_edges={len(evidence['top_k_edges'])}")
         print(f"wrote={args.out}")
+    elif args.command == "build-baseline-facts":
+        facts = build_baseline_facts(
+            out_path=args.out,
+            case_path=args.case,
+            baseline_summary_path=args.baseline_summary,
+            diagnostics_path=args.diagnostics,
+            sarif_path=args.sarif,
+            callgraph_path=args.callgraph,
+            include_rule_config=args.include_rule_config,
+        )
+        scan = facts["scan"]
+        conclusion = facts["known_public_conclusion"]
+        print(f"case_id={facts['case'].get('case_id')}")
+        print(
+            "baseline="
+            f"sources={scan['markedSourceCount']} "
+            f"sinks={scan['matchedSinkCount']} "
+            f"findings={scan['findingCount']}"
+        )
+        print(f"repair_candidate_if_no_finding={conclusion['repair_candidate_if_no_finding']}")
+        print(f"wrote={args.out}")
     elif args.command == "evidence-gate":
-        report = build_evidence_gate_report(args.case, args.out, args.evidence, args.callgraph)
+        report = build_evidence_gate_report(
+            args.case,
+            args.out,
+            args.evidence,
+            args.callgraph,
+            args.baseline_summary,
+        )
         print(f"case_id={report.get('case_id')}")
         print(f"gate_status={report['gate_status']}")
         print(f"reasons={'; '.join(report.get('decision_reason', []))}")
@@ -892,11 +1110,47 @@ def main() -> None:
             )
         print(f"wrote={args.out}")
         print(f"wrote={args.out.with_suffix('.md')}")
-    elif args.command == "generate-ccec-candidates":
-        report = build_ccec_candidates(args.case, args.out, args.top_k, strategy=args.strategy)
+    elif args.command == "run-end-to-end-case":
+        report = run_end_to_end_case(
+            tool_dir=args.tool_dir,
+            case_path=args.case,
+            out_dir=args.out_dir,
+            uast_sdk_path=args.uast_sdk_path,
+            timeout_seconds=args.timeout_seconds,
+            checker_ids=args.checker_ids,
+            oracle_path=args.oracle,
+        )
         print(f"case_id={report['case_id']}")
-        print(f"gap_type={report['gap_type']}")
+        print(f"final_result={report['evaluation']['final_result']}")
+        print(f"evaluation={report['evaluation']['status']}")
+        print(f"wrote={Path(report['out_dir']) / 'end_to_end_report.json'}")
+    elif args.command == "run-end-to-end-cases":
+        report = run_end_to_end_cases(
+            tool_dir=args.tool_dir,
+            cases_root=args.cases_root,
+            out_dir=args.out_dir,
+            uast_sdk_path=args.uast_sdk_path,
+            timeout_seconds=args.timeout_seconds,
+            checker_ids=args.checker_ids,
+            oracle_root=args.oracle_root,
+        )
+        print(f"cases_root={report['cases_root']}")
+        print(f"case_count={report['case_count']}")
+        for item in report["cases"]:
+            print(f"{item['case_id']} final={item['final_result']} evaluation={item['evaluation_status']}")
+        print(f"wrote={Path(report['out_dir']) / 'end_to_end_suite_report.json'}")
+    elif args.command == "generate-ccec-candidates":
+        report = build_ccec_candidates(
+            args.case,
+            args.out,
+            args.top_k,
+            strategy=args.strategy,
+        )
+        print(f"case_id={report['case_id']}")
+        print(f"candidate_gap_type={report['candidate_gap_type']}")
+        print(f"ccec_mode={report['ccec_mode']}")
         print(f"strategy={report['generation_strategy']}")
+        print(f"routing={report['routing_strategy']}")
         print(f"candidate_edges={len(report['candidate_edges'])}")
         print(f"wrote={args.out}")
     elif args.command == "plan-ccec-repair":
@@ -911,11 +1165,12 @@ def main() -> None:
         case = _load_json(args.case)
         gate = _load_json(args.gate) if args.gate else None
         diagnosis = _load_json(args.diagnosis) if args.diagnosis else None
-        prompt_text = build_ccec_prompt(case, gate, diagnosis, oracle_safe=args.oracle_safe)
+        oracle_safe = True
+        prompt_text = build_ccec_prompt(case, gate, diagnosis, oracle_safe=oracle_safe)
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(prompt_text, encoding="utf-8")
         print(f"case_id={case['case_id']}")
-        print(f"oracle_safe={args.oracle_safe}")
+        print(f"oracle_safe={oracle_safe}")
         print(f"wrote={args.out}")
     elif args.command == "validate-ccec-candidates":
         report = validate_ccec_candidates(args.candidates, args.out)
@@ -940,12 +1195,15 @@ def main() -> None:
         for item in report["sample_results"]:
             print(f"{item['sample']}={item['passed']}")
         print(f"wrote={args.out}")
-    elif args.command == "build-repaired-call-chain":
-        report = build_repaired_call_chain(args.case, args.candidates, args.out)
-        print(f"case_id={report['case_id']}")
+    elif args.command == "materialize-ccec-validation":
+        written = materialize_ccec_validation(args.response, args.out_dir)
+        for key, path in written.items():
+            print(f"{key}={path}")
+    elif args.command == "validate-ccec-local":
+        report = validate_ccec_local_samples(args.validation_dir, args.candidates, args.out)
         print(f"status={report['status']}")
-        print(f"complete_at_callgraph_level={report['complete_at_callgraph_level']}")
-        print(f"dataflow_still_required={report['dataflow_still_required']}")
+        for item in report["sample_results"]:
+            print(f"{item['sample']}={item['passed']}")
         print(f"wrote={args.out}")
     elif args.command == "build-ctpc-prompt":
         evidence = _load_json(args.evidence)
