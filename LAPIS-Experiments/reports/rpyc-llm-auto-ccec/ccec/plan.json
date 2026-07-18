@@ -1,0 +1,64 @@
+{
+  "schema_version": "lapis.ccec_repair_plan.v1",
+  "case_id": "cve-2024-27758-rpyc",
+  "case": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/connectivity_gap/cve-2024-27758-rpyc/case.json",
+  "candidate_gap_type": "connectivity_gap",
+  "declared_case_group": "connectivity_gap",
+  "declared_repair_branch": "ccec",
+  "mode": "hard",
+  "mode_profile": {
+    "mechanism": "llm_synthesized_virtual_or_materialized_edge",
+    "llm_role": "synthesize_dynamic_edge_contract_from_static_evidence",
+    "candidate_source": "factory/reflection/callback-table evidence without a directly materialized callee",
+    "repair_consumer": "virtual_or_materialized_edge_consumer",
+    "validation_strength": "strict must-link/must-not-link/must-kill plus rerun",
+    "description": "Use multi-source static evidence to synthesize a guarded dynamic, virtual, or materialized call-edge contract. No benchmark chain oracle is allowed."
+  },
+  "metadata_difficulty": null,
+  "llm_required": true,
+  "generation_strategy": "baseline_static_evidence_then_llm_synthesis",
+  "top_k": 5,
+  "candidate_count_from_static_rules": 2,
+  "evidence_kind": "dynamic_getattr_factory_method_evidence",
+  "evidence_summary": {
+    "observed_callsite": {
+      "file": "poc/poc_cve_2024_27758_rpyc.py",
+      "line": 21,
+      "expr": "array_callback()",
+      "enclosing_function": "numpy_like_array_coercion",
+      "attribute_name": "__array__",
+      "getattr_line": 20,
+      "getattr_expr": "array_callback = getattr(obj, \"__array__\")",
+      "callback_symbol": "array_callback",
+      "enclosing_function_start": 19,
+      "enclosing_function_end": 21
+    },
+    "candidate_definition_count": 0,
+    "factory_call_count": 3,
+    "factory_method_branch_count": 2,
+    "dynamic_type_site_count": 2
+  },
+  "next_steps": [
+    "build_baseline_facts",
+    "build_static_evidence_from_baseline",
+    "build_ccec_prompt",
+    "llm_synthesize_dynamic_or_virtual_edge_contract",
+    "validate_ccec_candidates",
+    "build_ccec_validation_prompt",
+    "llm_generate_must_link_must_not_link_must_kill",
+    "validate_ccec_link_contract",
+    "apply_virtual_edge_consumer_if_needed"
+  ],
+  "validation_plan": {
+    "structural": "validate-ccec-candidates",
+    "link_samples": "LLM generates must-link / must-not-link / must-kill",
+    "link_validation": "validate-ccec-link-contract",
+    "consumer": "virtual_or_materialized_edge_consumer",
+    "strength": "strict must-link/must-not-link/must-kill plus rerun"
+  },
+  "reason": [
+    "baseline evidence indicates dynamic getattr/factory materialization",
+    "callee may need virtual or materialized edge synthesis",
+    "candidate must be guarded by observed static factory/branch evidence"
+  ]
+}

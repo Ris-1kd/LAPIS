@@ -1,0 +1,18 @@
+{
+  "name": "array-generated-method-to-pickle-loads_must_link",
+  "expected": "edge_present",
+  "edge_id": "array-generated-method-to-pickle-loads",
+  "caller": "rpyc.core.netref._make_method.<generated __array__>",
+  "callsite": "pickle.loads(syncreq(self, consts.HANDLE_PICKLE, -1))",
+  "callee": "pickle.loads",
+  "guards": [
+    "generated __array__ body contains pickle.loads",
+    "the configured final sink fsig is pickle.loads"
+  ],
+  "violated_guard": null,
+  "kill_condition": null,
+  "evidence": [
+    "rpyc/core/netref.py:252 defines generated __array__ inside _make_method",
+    "rpyc/core/netref.py:255 calls final sink pickle.loads(syncreq(self, consts.HANDLE_PICKLE, -1))"
+  ]
+}

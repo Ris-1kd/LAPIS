@@ -1,0 +1,40 @@
+[
+  {
+    "checkerIds": [
+      "taint_flow_python_input_inner"
+    ],
+    "sources": {
+      "FuncCallReturnValueTaintSource": [
+        {
+          "fsig": "cve_2026_24486_source",
+          "values": [
+            "0"
+          ],
+          "scopeFile": "all",
+          "scopeFunc": "all"
+        }
+      ]
+    },
+    "sinks": {
+      "FuncCallTaintSink": [
+        {
+          "args": [
+            "0"
+          ],
+          "attribute": "lapis-must-flow-sink",
+          "fsig": "open"
+        }
+      ]
+    },
+    "entrypoints": [
+      {
+        "filePath": "/case.py",
+        "functionName": "main",
+        "attribute": "lapis-must-flow"
+      }
+    ],
+    "outputAtTaint": {
+      "traceStrategy": "full"
+    }
+  }
+]

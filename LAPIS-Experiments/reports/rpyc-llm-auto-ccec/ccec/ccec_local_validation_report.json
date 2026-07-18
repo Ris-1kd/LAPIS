@@ -1,0 +1,103 @@
+{
+  "schema_version": "lapis.ccec_local_validation.v1",
+  "candidates": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/rpyc-llm-auto-ccec/ccec/candidate_edges.llm.json",
+  "validation_dir": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/rpyc-llm-auto-ccec/ccec-validation",
+  "status": "accepted",
+  "sample_results": [
+    {
+      "sample": "must-link",
+      "passed": true,
+      "cases": [
+        {
+          "name": "array-boundary-to-generated-method_must_link",
+          "edge_id": "array-boundary-to-generated-method",
+          "expected": "edge_present",
+          "syntax_ok": true,
+          "syntax_error": null,
+          "target_covered": true,
+          "has_required_negative_condition": true,
+          "passed": true,
+          "expected_file": "LAPIS/LAPIS-Experiments/reports/rpyc-llm-auto-ccec/ccec-validation/must-link/array-boundary-to-generated-method-must-link/expected.json",
+          "code_file": "LAPIS/LAPIS-Experiments/reports/rpyc-llm-auto-ccec/ccec-validation/must-link/array-boundary-to-generated-method-must-link/case.py"
+        },
+        {
+          "name": "array-generated-method-to-pickle-loads_must_link",
+          "edge_id": "array-generated-method-to-pickle-loads",
+          "expected": "edge_present",
+          "syntax_ok": true,
+          "syntax_error": null,
+          "target_covered": true,
+          "has_required_negative_condition": true,
+          "passed": true,
+          "expected_file": "LAPIS/LAPIS-Experiments/reports/rpyc-llm-auto-ccec/ccec-validation/must-link/array-generated-method-to-pickle-loads-must-link/expected.json",
+          "code_file": "LAPIS/LAPIS-Experiments/reports/rpyc-llm-auto-ccec/ccec-validation/must-link/array-generated-method-to-pickle-loads-must-link/case.py"
+        }
+      ]
+    },
+    {
+      "sample": "must-not-link",
+      "passed": true,
+      "cases": [
+        {
+          "name": "array-boundary-to-generated-method_must_not_link",
+          "edge_id": "array-boundary-to-generated-method",
+          "expected": "edge_absent",
+          "syntax_ok": true,
+          "syntax_error": null,
+          "target_covered": true,
+          "has_required_negative_condition": true,
+          "passed": true,
+          "expected_file": "LAPIS/LAPIS-Experiments/reports/rpyc-llm-auto-ccec/ccec-validation/must-not-link/array-boundary-to-generated-method-must-not-link/expected.json",
+          "code_file": "LAPIS/LAPIS-Experiments/reports/rpyc-llm-auto-ccec/ccec-validation/must-not-link/array-boundary-to-generated-method-must-not-link/case.py"
+        },
+        {
+          "name": "array-generated-method-to-pickle-loads_must_not_link",
+          "edge_id": "array-generated-method-to-pickle-loads",
+          "expected": "edge_absent",
+          "syntax_ok": true,
+          "syntax_error": null,
+          "target_covered": true,
+          "has_required_negative_condition": true,
+          "passed": true,
+          "expected_file": "LAPIS/LAPIS-Experiments/reports/rpyc-llm-auto-ccec/ccec-validation/must-not-link/array-generated-method-to-pickle-loads-must-not-link/expected.json",
+          "code_file": "LAPIS/LAPIS-Experiments/reports/rpyc-llm-auto-ccec/ccec-validation/must-not-link/array-generated-method-to-pickle-loads-must-not-link/case.py"
+        }
+      ]
+    },
+    {
+      "sample": "must-kill",
+      "passed": true,
+      "cases": [
+        {
+          "name": "array-boundary-to-generated-method_must_kill",
+          "edge_id": "array-boundary-to-generated-method",
+          "expected": "edge_suppressed",
+          "syntax_ok": true,
+          "syntax_error": null,
+          "target_covered": true,
+          "has_required_negative_condition": true,
+          "passed": true,
+          "expected_file": "LAPIS/LAPIS-Experiments/reports/rpyc-llm-auto-ccec/ccec-validation/must-kill/array-boundary-to-generated-method-must-kill/expected.json",
+          "code_file": "LAPIS/LAPIS-Experiments/reports/rpyc-llm-auto-ccec/ccec-validation/must-kill/array-boundary-to-generated-method-must-kill/case.py"
+        },
+        {
+          "name": "array-generated-method-to-pickle-loads_must_kill",
+          "edge_id": "array-generated-method-to-pickle-loads",
+          "expected": "edge_suppressed",
+          "syntax_ok": true,
+          "syntax_error": null,
+          "target_covered": true,
+          "has_required_negative_condition": true,
+          "passed": true,
+          "expected_file": "LAPIS/LAPIS-Experiments/reports/rpyc-llm-auto-ccec/ccec-validation/must-kill/array-generated-method-to-pickle-loads-must-kill/expected.json",
+          "code_file": "LAPIS/LAPIS-Experiments/reports/rpyc-llm-auto-ccec/ccec-validation/must-kill/array-generated-method-to-pickle-loads-must-kill/case.py"
+        }
+      ]
+    }
+  ],
+  "next_runner": {
+    "kind": "yasa-callgraph-in-the-loop",
+    "state": "ready_for_run_yasa_case_or_future_run_yasa_ccec_validation",
+    "purpose": "Run YASA with --lapisCcecFile and callgraph output, then check edge_present/edge_absent/edge_suppressed expectations."
+  }
+}

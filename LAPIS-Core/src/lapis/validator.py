@@ -55,12 +55,12 @@ def _assigned_name(stmt: ast.Assign) -> str | None:
 
 
 def _is_source_call(node: ast.AST) -> bool:
-    return isinstance(node, ast.Call) and _name(node.func) == "source"
+    return isinstance(node, ast.Call) and (_name(node.func) == "source" or _name(node.func).endswith("_source"))
 
 
 def _has_sink_call(module: ast.Module) -> bool:
     for node in ast.walk(module):
-        if isinstance(node, ast.Call) and _name(node.func) == "sink":
+        if isinstance(node, ast.Call) and _name(node.func) in {"sink", "open"}:
             return True
     return False
 
@@ -74,6 +74,20 @@ def _has_key_whitelist_return(module: ast.Module, tainted_names: set[str]) -> bo
         has_return = any(isinstance(stmt, ast.Return) for stmt in node.body)
         has_literal_set = any(isinstance(child, (ast.Set, ast.Tuple, ast.List)) for child in ast.walk(node.test))
         if has_return and has_literal_set:
+            return True
+    return False
+
+
+def _has_filesystem_kill_guard(module: ast.Module, tainted_names: set[str]) -> bool:
+    for node in ast.walk(module):
+        if not isinstance(node, ast.If):
+            continue
+        if not tainted_names.intersection(_names_in(node.test)):
+            continue
+        test_text = ast.unparse(node.test) if hasattr(ast, "unparse") else ""
+        rejects_path_traversal = ".." in test_text or "basename" in test_text or "normpath" in test_text
+        has_return = any(isinstance(stmt, (ast.Return, ast.Raise)) for stmt in node.body)
+        if rejects_path_traversal and has_return:
             return True
     return False
 
@@ -99,7 +113,22 @@ def analyze_validation_code(path: Path) -> dict[str, Any]:
     dict_vars_with_tainted_value: set[str] = set()
     escaped_vars_preserving_keys: set[str] = set()
     formatted_query_vars: set[str] = set()
+    filesystem_path_vars: set[str] = set()
+    filesystem_features = {
+        "constructor_keyword_capture": False,
+        "file_name_split": False,
+        "file_attrs_assigned": False,
+        "fname_from_file_attrs": False,
+        "path_join_with_fname": False,
+        "open_path": False,
+    }
     evidence: list[dict[str, Any]] = []
+
+    for stmt in _iter_assignments(module):
+        target = _assigned_name(stmt)
+        if target and _is_source_call(stmt.value):
+            tainted_names.add(target)
+            evidence.append({"kind": "source_assignment", "line": stmt.lineno, "expr": _segment(text, stmt)})
 
     for stmt in _iter_assignments(module):
         target = _assigned_name(stmt)
@@ -107,8 +136,6 @@ def analyze_validation_code(path: Path) -> dict[str, Any]:
             continue
 
         if _is_source_call(stmt.value):
-            tainted_names.add(target)
-            evidence.append({"kind": "source_assignment", "line": stmt.lineno, "expr": _segment(text, stmt)})
             continue
 
         if isinstance(stmt.value, ast.Dict):
@@ -126,6 +153,28 @@ def analyze_validation_code(path: Path) -> dict[str, Any]:
                 dict_vars_with_tainted_value.add(target)
                 evidence.append({"kind": "tainted_dict_value", "line": stmt.lineno, "expr": _segment(text, stmt)})
             continue
+
+        value_names = _names_in(stmt.value)
+        if tainted_names.intersection(value_names) or filesystem_path_vars.intersection(value_names):
+            if isinstance(stmt.value, ast.Call):
+                call_name = _name(stmt.value.func)
+                keyword_names = {
+                    keyword.arg: _names_in(keyword.value)
+                    for keyword in stmt.value.keywords
+                    if keyword.arg is not None
+                }
+                if "join" in call_name or "path" in target.lower():
+                    filesystem_path_vars.add(target)
+                    evidence.append({"kind": "filesystem_path_assignment", "line": stmt.lineno, "expr": _segment(text, stmt)})
+                    continue
+                if any(tainted_names.intersection(names) for names in keyword_names.values()):
+                    filesystem_path_vars.add(target)
+                    evidence.append({"kind": "constructor_keyword_capture", "line": stmt.lineno, "expr": _segment(text, stmt)})
+                    continue
+            if isinstance(stmt.value, ast.BinOp) or "path" in target.lower() or "fname" in target.lower():
+                filesystem_path_vars.add(target)
+                evidence.append({"kind": "filesystem_direct_assignment", "line": stmt.lineno, "expr": _segment(text, stmt)})
+                continue
 
         if isinstance(stmt.value, ast.DictComp):
             generators = stmt.value.generators
@@ -145,9 +194,55 @@ def analyze_validation_code(path: Path) -> dict[str, Any]:
                 formatted_query_vars.add(target)
                 evidence.append({"kind": "percent_format_mapping_key", "line": stmt.lineno, "expr": _segment(text, stmt)})
 
-    kill_guard = _has_key_whitelist_return(module, tainted_names)
+    for node in ast.walk(module):
+        if isinstance(node, ast.Call):
+            call_name = _name(node.func)
+            keyword_names = {
+                keyword.arg: _names_in(keyword.value)
+                for keyword in node.keywords
+                if keyword.arg is not None
+            }
+            if tainted_names.intersection(keyword_names.get("file_name", set())):
+                filesystem_features["constructor_keyword_capture"] = True
+                evidence.append({"kind": "constructor_keyword_capture", "line": node.lineno, "expr": _segment(text, node)})
+            if call_name.endswith("splitext") and node.args and "file_name" in _names_in(node.args[0]):
+                filesystem_features["file_name_split"] = True
+                evidence.append({"kind": "file_name_split", "line": node.lineno, "expr": _segment(text, node)})
+            if call_name.endswith("join") and node.args and any("fname" in _names_in(arg) for arg in node.args):
+                filesystem_features["path_join_with_fname"] = True
+                filesystem_path_vars.add("path")
+                evidence.append({"kind": "path_join_keep_filename", "line": node.lineno, "expr": _segment(text, node)})
+            if call_name == "open" and node.args and "path" in _names_in(node.args[0]):
+                filesystem_features["open_path"] = True
+                evidence.append({"kind": "filesystem_sink_argument", "line": node.lineno, "expr": _segment(text, node)})
+        if isinstance(node, ast.Assign):
+            expr = _segment(text, node)
+            if "self._file_base" in expr or "self._ext" in expr:
+                filesystem_features["file_attrs_assigned"] = True
+                evidence.append({"kind": "file_attrs_assigned", "line": node.lineno, "expr": expr})
+            if "fname" in expr and ("self._file_base" in expr or "self._ext" in expr):
+                filesystem_features["fname_from_file_attrs"] = True
+                filesystem_path_vars.add("fname")
+                evidence.append({"kind": "fname_from_file_attrs", "line": node.lineno, "expr": expr})
+
+    kill_guard = _has_key_whitelist_return(module, tainted_names) or _has_filesystem_kill_guard(module, tainted_names)
     sink_hit = _has_sink_call(module)
-    finding = bool(formatted_query_vars and sink_hit and not kill_guard)
+    filesystem_sink_hit = False
+    for node in ast.walk(module):
+        if not isinstance(node, ast.Call):
+            continue
+        call_name = _name(node.func)
+        if call_name not in {"sink", "open"}:
+            continue
+        arg_names = set()
+        for arg in node.args:
+            arg_names.update(_names_in(arg))
+        filesystem_sink_hit = bool(filesystem_path_vars.intersection(arg_names) or tainted_names.intersection(arg_names))
+    filesystem_chain_hit = all(filesystem_features.values())
+    filesystem_risk_hit = filesystem_features["constructor_keyword_capture"] and (
+        filesystem_sink_hit or filesystem_chain_hit
+    )
+    finding = bool(((formatted_query_vars and sink_hit) or filesystem_risk_hit) and not kill_guard)
 
     features = {
         "source_hit": bool(tainted_names),
@@ -157,6 +252,9 @@ def analyze_validation_code(path: Path) -> dict[str, Any]:
         "dict_vars_with_tainted_value": sorted(dict_vars_with_tainted_value),
         "escaped_vars_preserving_keys": sorted(escaped_vars_preserving_keys),
         "formatted_query_vars": sorted(formatted_query_vars),
+        "filesystem_path_vars": sorted(filesystem_path_vars),
+        "filesystem_sink_hit": filesystem_sink_hit,
+        "filesystem_features": filesystem_features,
         "kill_guard": kill_guard,
     }
 
@@ -195,6 +293,21 @@ def _edge_coverage(ctpc: dict[str, Any], sample_analyses: dict[str, dict[str, An
         elif edge_kind == "percent_mapping_key":
             covered = bool(features.get("formatted_query_vars"))
             reason = "percent formatting consumes mapping with preserved tainted keys"
+        elif edge_kind in {
+            "direct_assignment",
+            "constructor_keyword_capture",
+            "path_join_keep_filename",
+            "filesystem_path_assignment",
+            "filesystem_sink_argument",
+            "sink_argument",
+        }:
+            filesystem_features = features.get("filesystem_features") or {}
+            covered = bool(
+                features.get("filesystem_path_vars")
+                or features.get("filesystem_sink_hit")
+                or any(filesystem_features.values())
+            )
+            reason = "filesystem validation sample propagates source-derived filename/path into sink argument"
         coverage.append(
             {
                 "edge_id": edge.get("edge_id"),
@@ -297,13 +410,24 @@ def build_yasa_validation_rules(validation_dir: Path, out_dir: Path) -> dict[str
         case_path = sample_dir / "case.py"
         if not case_path.exists():
             raise FileNotFoundError(case_path)
+        module = ast.parse(case_path.read_text(encoding="utf-8"))
+        function_names = [node.name for node in ast.walk(module) if isinstance(node, ast.FunctionDef)]
+        source_fsig = next((name for name in function_names if name == "source" or name.endswith("_source")), "source")
+        entrypoint = "test" if "test" in function_names else ("main" if "main" in function_names else function_names[-1])
+        sink_fsig = "sink"
+        sink_arg = "0"
+        for node in ast.walk(module):
+            if isinstance(node, ast.Call) and _name(node.func) == "open":
+                sink_fsig = "open"
+                sink_arg = "0"
+                break
         rule = [
             {
                 "checkerIds": ["taint_flow_python_input_inner"],
                 "sources": {
                     "FuncCallReturnValueTaintSource": [
                         {
-                            "fsig": "source",
+                            "fsig": source_fsig,
                             "values": ["0"],
                             "scopeFile": "all",
                             "scopeFunc": "all",
@@ -313,16 +437,16 @@ def build_yasa_validation_rules(validation_dir: Path, out_dir: Path) -> dict[str
                 "sinks": {
                     "FuncCallTaintSink": [
                         {
-                            "args": ["0"],
+                            "args": [sink_arg],
                             "attribute": f"lapis-{sample}-sink",
-                            "fsig": "sink",
+                            "fsig": sink_fsig,
                         }
                     ]
                 },
                 "entrypoints": [
                     {
                         "filePath": "/case.py",
-                        "functionName": "test",
+                        "functionName": entrypoint,
                         "attribute": f"lapis-{sample}",
                     }
                 ],

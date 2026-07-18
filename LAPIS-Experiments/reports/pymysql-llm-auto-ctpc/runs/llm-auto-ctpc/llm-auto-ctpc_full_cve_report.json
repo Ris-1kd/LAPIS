@@ -1,0 +1,130 @@
+{
+  "runner": "yasa",
+  "scope": "full-cve",
+  "label": "llm-auto-ctpc",
+  "case_id": "cve-2024-36039-pymysql",
+  "tool_dir": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Tool",
+  "case_path": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/propagation_gap/cve-2024-36039-pymysql/case.json",
+  "source_path": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/propagation_gap/cve-2024-36039-pymysql/dataset",
+  "rule_file": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/propagation_gap/cve-2024-36039-pymysql/rules/final-sink-only.json",
+  "uast_sdk_path": "/home/ubuntu/llm-yasa-repair/YASA-Engine-upstream/uast4py-linux-amd64",
+  "ctpc_file": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/pymysql-llm-auto-ctpc/ctpc/ctpc.json",
+  "ccec_file": null,
+  "checker_ids": "taint_flow_python_input_inner",
+  "dump_cg": false,
+  "status": "reported",
+  "result": "finding",
+  "returncode": 0,
+  "report_dir": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/pymysql-llm-auto-ctpc/runs/llm-auto-ctpc/llm-auto-ctpc",
+  "summary": {
+    "projectName": "dataset",
+    "projectPath": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/propagation_gap/cve-2024-36039-pymysql/dataset/",
+    "yasaVersion": "0.3.1",
+    "parallelWorkers": 1,
+    "cgAlgorithm": "DEFAULT",
+    "dumpAllCG": false,
+    "dumpAST": false,
+    "scanStartTime": "2026-07-18T07:57:04.134Z",
+    "scanEndTime": "2026-07-18T07:57:09.813Z",
+    "findingCount": 1,
+    "language": "python",
+    "fileCount": 20,
+    "lineCount": 4367,
+    "totalTimeMs": 5679,
+    "markedSourceCount": 1,
+    "matchedSinkCount": 2,
+    "entryPointCount": 1,
+    "parseMs": 5166,
+    "parseCodeMs": 4060,
+    "preloadMs": 53,
+    "processModuleMs": 1029,
+    "startAnalyzeMs": 41,
+    "symbolInterpretMs": 56,
+    "execCount": 11250,
+    "execInstCount": 4788,
+    "avgExecTimePerInst": 0,
+    "avgInstExecCount": 2.3496240601503757,
+    "execTimeP70Ms": 0,
+    "execTimeP99Ms": 0,
+    "execTimeP100Ms": 0,
+    "execTimesP70": 1,
+    "execTimesP99": 37,
+    "execTimesP100": 429,
+    "ruleConfig": [
+      {
+        "checkerIds": [
+          "taint_flow_python_input_inner"
+        ],
+        "sources": {
+          "FuncCallReturnValueTaintSource": [
+            {
+              "fsig": "cve_2024_36039_source",
+              "values": [
+                "0"
+              ],
+              "scopeFile": "all",
+              "scopeFunc": "all"
+            }
+          ]
+        },
+        "sinks": {
+          "FuncCallTaintSink": [
+            {
+              "args": [
+                "0"
+              ],
+              "attribute": "CVE-2024-36039-pymysql-query-send",
+              "fsig": "self._query"
+            }
+          ]
+        },
+        "entrypoints": [
+          {
+            "filePath": "/poc/poc_cve_2024_36039_pymysql.py",
+            "functionName": "cve_2024_36039_driver",
+            "attribute": "poc-cve-2024-36039-final-sink-only"
+          }
+        ],
+        "outputAtTaint": {
+          "traceStrategy": "full"
+        }
+      }
+    ]
+  },
+  "run": {
+    "command": [
+      "timeout",
+      "180s",
+      "npx",
+      "tsx",
+      "src/main.ts",
+      "--sourcePath",
+      "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/propagation_gap/cve-2024-36039-pymysql/dataset",
+      "--language",
+      "python",
+      "--report",
+      "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/pymysql-llm-auto-ctpc/runs/llm-auto-ctpc/llm-auto-ctpc",
+      "--ruleConfigFile",
+      "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/propagation_gap/cve-2024-36039-pymysql/rules/final-sink-only.json",
+      "--checkerIds",
+      "taint_flow_python_input_inner",
+      "--entrypointMode",
+      "ONLY_CUSTOM",
+      "--workerCount",
+      "1",
+      "--incremental",
+      "false",
+      "--taintTraceOutputStrategy",
+      "full",
+      "--uastSDKPath",
+      "/home/ubuntu/llm-yasa-repair/YASA-Engine-upstream/uast4py-linux-amd64",
+      "--lapisCtpcFile",
+      "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/pymysql-llm-auto-ctpc/ctpc/ctpc.json"
+    ],
+    "cwd": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Tool",
+    "returncode": 0,
+    "stdout_tail": "ker/taint/python/python-taint-checker.ts\n[YASA][init] Successfully loaded 1 checker(s): [taint_flow_python_input_inner]\n[YASA] Executing preProcess\n[YASA][preProcess] Executing parseCode\n[YASA][preProcess] Completed parseCode, cost: 4060ms, heap: 45.95/64.93 MB, rss: 150.63 MB, arrayBuffers: 0.05 MB\n[YASA][preProcess] Executing preload\n[YASA][preProcess] Completed preload, cost: 53ms, heap: 37.27/69.39 MB, rss: 155.99 MB, arrayBuffers: 0.05 MB\n[YASA][preProcess] Executing processModule\n[YASA][preProcess] Completed processModule, cost: 1029ms, heap: 55.16/77.68 MB, rss: 164.52 MB, arrayBuffers: 0.04 MB\n[YASA] Completed preProcess, cost: 5166ms, heap: 55.18/77.68 MB, rss: 164.52 MB, arrayBuffers: 0.04 MB\n[YASA] Executing startAnalyze\n[YASA] Completed startAnalyze, cost: 41ms, heap: 59.61/78.06 MB, rss: 164.77 MB, arrayBuffers: 0.04 MB\n[YASA] Executing symbolInterpret\nEntryPoint [/poc/poc_cve_2024_36039_pymysql.cve_2024_36039_driver] is executing\n[YASA] Completed symbolInterpret, cost: 56ms, heap: 50.73/79.93 MB, rss: 166.65 MB, arrayBuffers: 0.04 MB\nFound 4 potential output strategy files\nRegistered strategy: callchain from callchain-output-strategy.ts\nRegistered strategy: callgraph from callgraph-output-strategy.ts\nRegistered strategy: interactive from interactive-output-strategy.ts\nRegistered strategy: taintflow from taint-output-strategy.ts\nSuccessfully registered 4 output strategies\n\n=======================  outputFindings  =======================\n\n======================== Findings ======================== \n\n-------------  1 :  taint_flow_python_input_inner ------------- \nDescription: Python污点分析checker，不会使用CallGraph边界制作entrypoint，蚂蚁内部使用\nFile: /pymysql/cursors.py\nLine 153: self._query(query)\nSINK RULE: self._query\nSINK Attribute: CVE-2024-36039-pymysql-query-send\nentrypoint: \n{\n  filePath: '/poc/poc_cve_2024_36039_pymysql.py',\n  functionName: 'cve_2024_36039_driver',\n  attribute: 'poc-cve-2024-36039-final-sink-only',\n  type: 'functionCall',\n  packageName: undefined,\n  funcReceiverType: ''\n}\nTrace: \n /pymysql/cursors.py\n  AffectedNodeName: LAPIS CTPC: ctpc access-path propagation reached sql_injection value query; final sink self._query\n  30:  SOURCE:      #: Max size of allowed statement is max_allowed_packet - packet_header_size.\n /pymysql/cursors.py\n  AffectedNodeName: self._query\n  153: SINK:          result = self._query(query)\n==========================================================\n  # Total-findings : 1\n========================================================== \n\nreport is write to /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/pymysql-llm-auto-ctpc/runs/llm-auto-ctpc/llm-auto-ctpc/report.sarif\n================================================================\n\nanalyze done\n[YASA] Execution completed, cost: 5679ms, heap: 53.04/80.18 MB, rss: 166.89 MB, arrayBuffers: 0.07 MB\n\n======================  Analysis Overview  =====================\nLanguage                           : python\nFiles analyzed                     : 20\nLines of code                      : 4,367\nTotal time                         : 5s660ms\nExecuted instruction               : 4788\nExecution count                    : 11250\nSources marked                     : 1\nSinks matched                      : 2\nValid entrypoints                  : 1\nFindings                           : 1\nAvg execution time per instruction : 0.00ms\nAvg instruction execution count    : 2.35\nExecution time 70%/99%/100%        : 0.00ms/0.00ms/0.00ms\nExecution times 70%/99%/100%       : 1.00/37.00/429.00\n================================================================\n\n\n===================  Performance Statistics  ===================\ntotal cost: 5s679ms\npreProcess cost: 5s166ms (91.0%)\n  parseCode cost: 4s60ms (78.6%)\n  preload cost: 0s53ms (1.0%)\n  processModule cost: 1s29ms (19.9%)\n  other cost: 0s24ms (0.5%)\nstartAnalyze cost: 0s41ms (0.7%)\nsymbolInterpret cost: 0s56ms (1.0%)\nother cost: 0s416ms (7.3%)\n================================================================\n\n",
+    "stderr_tail": ""
+  },
+  "interpretation": "This is a full original-CVE run. A finding here is evidence that the enhanced analyzer connected the case entrypoint, interprocedural execution context, CTPC access-path facts, and final sink rule on the original dataset."
+}

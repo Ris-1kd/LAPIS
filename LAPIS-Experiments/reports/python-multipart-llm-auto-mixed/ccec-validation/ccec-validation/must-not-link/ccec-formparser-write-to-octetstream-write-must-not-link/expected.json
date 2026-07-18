@@ -1,0 +1,15 @@
+{
+  "name": "ccec-formparser-write-to-octetstream-write_must_not_link",
+  "expected": "edge_absent",
+  "edge_id": "ccec_formparser_write_to_octetstream_write",
+  "caller": "python_multipart.multipart.FormParser.write",
+  "callsite": "callback table with only on_other",
+  "callee": "python_multipart.multipart.OctetStreamParser.write",
+  "guards": [],
+  "violated_guard": "callbacks table lacks the corresponding on_start/on_data binding",
+  "kill_condition": null,
+  "evidence": [
+    "python_multipart/multipart.py:1765 FormParser.write delegates to self.parser.write(data)",
+    "python_multipart/multipart.py:1578 octet-stream branch stores OctetStreamParser in self.parser"
+  ]
+}

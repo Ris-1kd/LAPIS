@@ -1,0 +1,321 @@
+You are synthesizing a Conditional Taint Propagation Contract (CTPC).
+
+Use only the Evidence Pack below. Do not invent source functions, sink functions,
+variables, files, or edges that are not supported by the evidence.
+
+Goal:
+- Explain the missing access-path propagation.
+- Synthesize a CTPC that propagates only under the structural guards supported
+  by the evidence.
+- Do not generate validation programs in this step. Validation sample generation
+  is handled by a separate module.
+- Use only CTPC pattern kinds implemented by the analyzer:
+  - propagation_edges[].pattern.kind: dict_literal_key, dict_comprehension_key_preserved, percent_mapping_key,
+    direct_assignment, constructor_keyword_capture, path_join_keep_filename,
+    filesystem_path_assignment, filesystem_sink_argument, sink_argument
+  - function_summaries[].pattern.kind: return_fact_from_argument
+  - kill_conditions[].pattern.kind: membership_rejection_guard, missing_mapping_key_fact
+- Do not invent generic pattern kinds such as dict_literal, percent_mapping,
+  return_variable, call_assignment, db_execute, arbitrary_callback, or object_graph_magic.
+- Model ordinary variable assignment/return/sink reachability with the existing
+  analyzer, not with CTPC propagation edges. CTPC should only repair missing
+  access-path/dataflow semantics supported by the evidence.
+- For mixed callback cases where post-CCEC still cannot materialize the callback
+  body, a sink propagation edge may set pattern.callee to the observed callback
+  boundary and pattern.virtual_final_sink to the local final sink supported by
+  static evidence, but only when the Evidence Pack exposes that boundary and
+  local final sink.
+
+Return one JSON object with this exact top-level shape. Conditions must be
+machine-readable: use event + pattern + effect fields. Keep natural-language
+explanations only in description/evidence fields.
+
+{
+  "schema_version": "ctpc.v2",
+  "contract_name": "string",
+  "gap_type": ["string"],
+  "applies_to": {
+    "language": "python",
+    "risk_kind": "string"
+  },
+  "fact_types": [
+    {
+      "name": "string",
+      "shape": {"access_path": "string"}
+    }
+  ],
+  "propagation_edges": [
+    {
+      "edge_id": "string",
+      "event": "assignment | binary_operation | function_call | return | member_access | if_condition | sink",
+      "pattern": {"kind": "string", "callee": "string | optional", "argument_index": 0, "virtual_final_sink": "string | optional"},
+      "from": {"fact": "string", "expr": "string"},
+      "to": {"fact": "string", "expr": "string", "access_path": "string", "risk_kind": "string"},
+      "evidence": {"file": "string", "line": 0, "code": "string"},
+      "description": "string"
+    }
+  ],
+  "function_summaries": [
+    {
+      "summary_id": "string",
+      "event": "function_call | return",
+      "pattern": {
+        "kind": "return_fact_from_argument",
+        "callee": "string",
+        "argument_index": 0,
+        "receiver_policy": "any | exact"
+      },
+      "from": {"fact": "string", "expr": "$arg0.access_path"},
+      "to": {"fact": "string", "expr": "$return", "access_path": "$return.access_path", "risk_kind": "string"},
+      "evidence": {"file": "string", "line": 0, "code": "string"}
+    }
+  ],
+  "risk_upgrades": [
+    {
+      "upgrade_id": "string",
+      "event": "assignment | binary_operation | function_call | return | member_access | sink",
+      "pattern": {"kind": "string"},
+      "from": {"fact": "string", "expr": "string"},
+      "to": {"fact": "string", "expr": "string"},
+      "risk_kind": "string"
+    }
+  ],
+  "kill_conditions": [
+    {
+      "kill_id": "string",
+      "event": "if_condition | assignment | function_call | sink",
+      "pattern": {"kind": "string"},
+      "effect": {"action": "suppress", "risk_kind": "string", "for_fact": "string"},
+      "evidence": {"file": "string", "line": 0, "code": "string"}
+    }
+  ],
+  "validation_expectations": {
+    "must_flow": "finding",
+    "must_not_flow": "no_finding",
+    "must_kill": "no_finding"
+  },
+  "description": "string",
+  "notes": ["string"]
+}
+
+Evidence Pack:
+
+```json
+{
+  "case_id": "cve-2026-24486-python-multipart",
+  "project": "python-multipart",
+  "vulnerability": "path traversal / arbitrary file overwrite",
+  "baseline_status": {
+    "source_hit": true,
+    "sink_hit": true,
+    "call_context_reachable": true,
+    "complete_taint_path_found": false,
+    "sources_marked": 2,
+    "sinks_matched": 12,
+    "findings": 0,
+    "entrypoints": 1
+  },
+  "source": {
+    "file": "poc/poc_cve_2026_24486_python_multipart.py",
+    "line": 9,
+    "symbol": "filename",
+    "expr": "filename = cve_2026_24486_source()",
+    "path": "/home/ubuntu/llm-yasa-repair/py-bench/cve-2026-24486-python-multipart/poc/poc_cve_2026_24486_python_multipart.py",
+    "observed": "filename = cve_2026_24486_source()",
+    "matches_anchor": true
+  },
+  "sink": {
+    "file": "multipart.py",
+    "line": 478,
+    "callee": "open",
+    "argument": "path",
+    "expr": "open(path, \"w+b\")",
+    "path": "/home/ubuntu/llm-yasa-repair/py-bench/cve-2026-24486-python-multipart/python_multipart/multipart.py",
+    "observed": "tmp_file = open(path, \"w+b\")",
+    "matches_anchor": false
+  },
+  "source_forward_slice": {
+    "source": "filename",
+    "reached": [
+      "filename"
+    ],
+    "frontier": "FormParser(..., file_name=filename)",
+    "observations": [
+      {
+        "label": "source return is assigned to filename",
+        "file": "poc/poc_cve_2026_24486_python_multipart.py",
+        "line": 9,
+        "code": "filename = cve_2026_24486_source()"
+      },
+      {
+        "label": "filename is passed as FormParser file_name keyword",
+        "file": "poc/poc_cve_2026_24486_python_multipart.py",
+        "line": 20,
+        "code": "file_name=filename,"
+      }
+    ]
+  },
+  "sink_backward_slice": {
+    "sink": "open(path, \"w+b\")",
+    "argument": "path",
+    "dependency_chain": [
+      "path",
+      "fname",
+      "self._file_base",
+      "self._ext"
+    ],
+    "observations": [
+      {
+        "label": "open consumes path",
+        "file": "python_multipart/multipart.py",
+        "line": 478,
+        "code": "tmp_file = open(path, \"w+b\")"
+      },
+      {
+        "label": "path depends on fname",
+        "file": "python_multipart/multipart.py",
+        "line": 475,
+        "code": "path = os.path.join(file_dir, fname)  # type: ignore[arg-type]"
+      },
+      {
+        "label": "fname depends on _file_base/_ext",
+        "file": "python_multipart/multipart.py",
+        "line": 473,
+        "code": "fname = self._file_base + self._ext if keep_extensions else self._file_base"
+      }
+    ]
+  },
+  "local_structure_evidence": {
+    "callback_chain_context": {
+      "note": "CCEC stage should repair octet-stream callback dispatch before CTPC is accepted.",
+      "facts": [
+        {
+          "label": "FormParser constructor at public entry",
+          "file": "poc/poc_cve_2026_24486_python_multipart.py",
+          "line": 16,
+          "code": "parser = FormParser("
+        },
+        {
+          "label": "file_name keyword carries the local filename variable",
+          "file": "poc/poc_cve_2026_24486_python_multipart.py",
+          "line": 20,
+          "code": "file_name=filename,"
+        },
+        {
+          "label": "driver invokes parser.write",
+          "file": "poc/poc_cve_2026_24486_python_multipart.py",
+          "line": 23,
+          "code": "return parser.write(b\"file-content\")"
+        },
+        {
+          "label": "OctetStreamParser receives on_start/on_data callbacks",
+          "file": "python_multipart/multipart.py",
+          "line": 1578,
+          "code": "parser = OctetStreamParser("
+        },
+        {
+          "label": "FormParser.write delegates to self.parser.write",
+          "file": "python_multipart/multipart.py",
+          "line": 1765,
+          "code": "return self.parser.write(data)"
+        }
+      ]
+    },
+    "access_path_evidence": [
+      {
+        "label": "File.__init__ accepts file_name",
+        "file": "python_multipart/multipart.py",
+        "line": 360,
+        "code": "def __init__(self, file_name: bytes | None, field_name: bytes | None = None, config: FileConfig = {}) -> None:"
+      },
+      {
+        "label": "constructor branches when file_name is provided",
+        "file": "python_multipart/multipart.py",
+        "line": 377,
+        "code": "if file_name is not None:"
+      },
+      {
+        "label": "os.path.splitext splits file_name into base/ext",
+        "file": "python_multipart/multipart.py",
+        "line": 378,
+        "code": "base, ext = os.path.splitext(file_name)"
+      },
+      {
+        "label": "self._file_base stores base",
+        "file": "python_multipart/multipart.py",
+        "line": 379,
+        "code": "self._file_base = base"
+      },
+      {
+        "label": "self._ext stores ext",
+        "file": "python_multipart/multipart.py",
+        "line": 380,
+        "code": "self._ext = ext"
+      },
+      {
+        "label": "keep_filename guard enables filename preservation",
+        "file": "python_multipart/multipart.py",
+        "line": 468,
+        "code": "if file_dir is not None and keep_filename:"
+      },
+      {
+        "label": "fname is derived from self._file_base/self._ext",
+        "file": "python_multipart/multipart.py",
+        "line": 473,
+        "code": "fname = self._file_base + self._ext if keep_extensions else self._file_base"
+      },
+      {
+        "label": "path is os.path.join(file_dir, fname)",
+        "file": "python_multipart/multipart.py",
+        "line": 475,
+        "code": "path = os.path.join(file_dir, fname)  # type: ignore[arg-type]"
+      },
+      {
+        "label": "open consumes path",
+        "file": "python_multipart/multipart.py",
+        "line": 478,
+        "code": "tmp_file = open(path, \"w+b\")"
+      }
+    ],
+    "supported_pattern_hints": [
+      "constructor_keyword_capture for FormParser(..., file_name=filename)",
+      "direct_assignment for self._file_base/self._ext/fname/path locals derived from filename facts",
+      "path_join_keep_filename for os.path.join(file_dir, fname)",
+      "filesystem_path_assignment for assigning a derived path local",
+      "filesystem_sink_argument for open(path, ...)"
+    ],
+    "negative_evidence": [
+      "UPLOAD_KEEP_FILENAME must be true for the original filename to be preserved.",
+      "Without file_name, File.__init__ generates a temporary filename rather than preserving user filename.",
+      "The CTPC should not treat parser.write(data) bytes as the filename source."
+    ]
+  },
+  "local_convergence": {
+    "object": "File/FormParser filename access path",
+    "access_path": "file_name -> self._file_base/self._ext -> fname -> path",
+    "source_frontier": "FormParser(..., file_name=filename)",
+    "sink_dependency_node": "open(path)",
+    "is_converged": true
+  },
+  "top_k_edges": [
+    {
+      "from": "filename",
+      "to": "FormParser.file_name",
+      "kind": "constructor_keyword_capture",
+      "evidence": "poc passes file_name=filename"
+    },
+    {
+      "from": "file_name",
+      "to": "self._file_base/self._ext",
+      "kind": "direct_assignment",
+      "evidence": "File.__init__ splits and stores file_name parts"
+    },
+    {
+      "from": "fname",
+      "to": "path",
+      "kind": "path_join_keep_filename",
+      "evidence": "path = os.path.join(file_dir, fname)"
+    }
+  ]
+}
+```

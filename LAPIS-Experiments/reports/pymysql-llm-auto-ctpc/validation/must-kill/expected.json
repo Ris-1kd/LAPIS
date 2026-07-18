@@ -1,0 +1,4 @@
+{
+  "name": "pymysql_mapping_key_guard_must_kill",
+  "expected": "no_finding"
+}

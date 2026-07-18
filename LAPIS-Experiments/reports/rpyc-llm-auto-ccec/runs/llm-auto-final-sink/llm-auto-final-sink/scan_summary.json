@@ -1,0 +1,75 @@
+{
+  "projectName": "cve-2024-27758-rpyc",
+  "projectPath": "/home/ubuntu/llm-yasa-repair/py-bench/cve-2024-27758-rpyc/",
+  "yasaVersion": "0.3.1",
+  "parallelWorkers": 1,
+  "cgAlgorithm": "DEFAULT",
+  "dumpAllCG": false,
+  "dumpAST": false,
+  "scanStartTime": "2026-07-18T06:32:11.745Z",
+  "scanEndTime": "2026-07-18T06:32:20.956Z",
+  "findingCount": 1,
+  "language": "python",
+  "fileCount": 30,
+  "lineCount": 6497,
+  "totalTimeMs": 9211,
+  "markedSourceCount": 1,
+  "matchedSinkCount": 0,
+  "entryPointCount": 1,
+  "parseMs": 8776,
+  "parseCodeMs": 5537,
+  "preloadMs": 31,
+  "processModuleMs": 3191,
+  "startAnalyzeMs": 22,
+  "symbolInterpretMs": 80,
+  "execCount": 22827,
+  "execInstCount": 3489,
+  "avgExecTimePerInst": 0,
+  "avgInstExecCount": 6.54256233877902,
+  "execTimeP70Ms": 0,
+  "execTimeP99Ms": 0,
+  "execTimeP100Ms": 0,
+  "execTimesP70": 2,
+  "execTimesP99": 62,
+  "execTimesP100": 93,
+  "ruleConfig": [
+    {
+      "checkerIds": [
+        "taint_flow_python_input_inner"
+      ],
+      "sources": {
+        "FuncCallReturnValueTaintSource": [
+          {
+            "fsig": "cve_2024_27758_source",
+            "values": [
+              "0"
+            ],
+            "scopeFile": "poc/poc_cve_2024_27758_rpyc",
+            "scopeFunc": "cve_2024_27758_driver"
+          }
+        ]
+      },
+      "sinks": {
+        "FuncCallTaintSink": [
+          {
+            "args": [
+              "0"
+            ],
+            "attribute": "CVE-2024-27758-rpyc-pickle-deserialization",
+            "fsig": "pickle.loads"
+          }
+        ]
+      },
+      "entrypoints": [
+        {
+          "filePath": "/poc/poc_cve_2024_27758_rpyc.py",
+          "functionName": "cve_2024_27758_driver",
+          "attribute": "poc-cve-2024-27758-final-sink-only"
+        }
+      ],
+      "outputAtTaint": {
+        "traceStrategy": "full"
+      }
+    }
+  ]
+}

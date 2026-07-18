@@ -139,14 +139,54 @@ class PythonTaintAbstractChecker extends TaintChecker {
     const funcCallArgTaintSource = this.checkerRuleConfigContent.sources?.FuncCallArgTaintSource
     IntroduceTaint.introduceFuncArgTaintByRuleConfig(fclos?.object, node, callInfo, funcCallArgTaintSource)
     LapisCtpc.recordFunctionCall(analyzer, scope, node, state, info)
+    this.checkCtpcVirtualFinalSinkBoundary(node, fclos, state)
     this.checkCcecBoundary(node, fclos, state)
     this.checkByNameMatch(node, fclos, callInfo, state)
     this.checkByFieldMatch(node, fclos, callInfo, state)
   }
 
+  checkCtpcVirtualFinalSinkBoundary(node: any, fclos: any, state?: any) {
+    const rules = this.checkerRuleConfigContent.sinks?.FuncCallTaintSink || []
+    const decision = LapisCtpc.evaluatePythonVirtualFinalSinkBoundary(node, rules)
+    if (!decision.enabled || decision.action !== 'force' || !decision.finalSink) {
+      return false
+    }
+    const syntheticArg = buildSyntheticCcecArg(node, [
+      {
+        file: node?.loc?.sourcefile,
+        line: decision.sourceLine || node?.loc?.start?.line,
+        node,
+        tag: 'SOURCE: ',
+        affectedNodeName: `LAPIS CTPC: ${decision.reason}; final sink ${decision.finalSink}`,
+      },
+    ])
+    let ruleName = decision.finalSink
+    if (decision.sinkAttribute) {
+      ruleName += `\nSINK Attribute: ${decision.sinkAttribute}`
+    }
+    const taintFlowFinding = this.buildTaintFinding(
+      this.getCheckerId(),
+      this.desc,
+      node,
+      syntheticArg,
+      fclos,
+      TAINT_TAG_NAME_PYTHON,
+      ruleName,
+      [],
+      state?.callstack,
+      state?.callsites
+    )
+    if (!TaintOutputStrategy.isNewFinding(this.resultManager, taintFlowFinding)) return true
+    this.resultManager.newFinding(taintFlowFinding, TaintOutputStrategy.outputStrategyId)
+    return true
+  }
+
   checkCcecBoundary(node: any, fclos: any, state?: any) {
     const decision = LapisCcec.evaluatePythonBoundary(node)
     if (!decision.enabled || decision.action !== 'force' || !decision.virtualSink || !Array.isArray(decision.traces)) {
+      return false
+    }
+    if (LapisCtpc.hasVirtualFinalSinkBoundary(node)) {
       return false
     }
     const syntheticArg = buildSyntheticCcecArg(node, decision.traces)
@@ -296,6 +336,7 @@ class PythonTaintAbstractChecker extends TaintChecker {
     const args = BasicRuleHandler.prepareArgs(callInfo, fclos, rule)
     const ccecDecision = LapisCcec.evaluatePythonSink(node, rule)
     const ctpcDecision = LapisCtpc.evaluatePythonSink(node, rule)
+    const suppressCcecVirtualSink = LapisCtpc.hasVirtualFinalSinkBoundary(node)
     if (ccecDecision.enabled && ccecDecision.action === 'suppress') {
       return false
     }
@@ -304,6 +345,7 @@ class PythonTaintAbstractChecker extends TaintChecker {
     }
     const effectiveArgs =
       ccecDecision.enabled &&
+      !suppressCcecVirtualSink &&
       ccecDecision.action === 'force' &&
       ccecDecision.virtualSink &&
       args.length === 0 &&
@@ -312,6 +354,7 @@ class PythonTaintAbstractChecker extends TaintChecker {
         : args
     if (
       ccecDecision.enabled &&
+      !suppressCcecVirtualSink &&
       ccecDecision.action === 'force' &&
       ccecDecision.virtualSink &&
       args.length === 0 &&
@@ -338,7 +381,7 @@ class PythonTaintAbstractChecker extends TaintChecker {
       this.resultManager.newFinding(taintFlowFinding, TaintOutputStrategy.outputStrategyId)
       return true
     }
-    if (ccecDecision.enabled && ccecDecision.action === 'force') {
+    if (ccecDecision.enabled && !suppressCcecVirtualSink && ccecDecision.action === 'force') {
       const targetArgs = ccecDecision.virtualSink ? effectiveArgs.filter((arg: any) => arg?.taint) : effectiveArgs
       for (const arg of targetArgs) {
         if (!arg?.taint) continue

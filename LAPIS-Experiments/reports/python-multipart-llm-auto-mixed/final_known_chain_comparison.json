@@ -1,0 +1,48 @@
+{
+  "schema_version": "lapis.final_chain_comparison.v1",
+  "case_id": "cve-2026-24486-python-multipart",
+  "sink_constraint": {
+    "policy": "single_final_sink",
+    "final_sink": "open",
+    "boundary_sink": "parser.write",
+    "constraint": "When CTPC declares pattern.virtual_final_sink for the parser.write boundary, CCEC boundary findings are kept as evidence only and are not emitted as separate final findings."
+  },
+  "generated_final_result": {
+    "run": "runs/final-single-sink-v2/final-single-sink-v2_full_cve_report.json",
+    "finding_count": 1,
+    "finding_file": "poc/poc_cve_2026_24486_python_multipart.py",
+    "finding_line": 23,
+    "reported_boundary": "parser.write(b\"file-content\")",
+    "reported_final_sink": "open",
+    "source": "poc/poc_cve_2026_24486_python_multipart.py:9 filename = cve_2026_24486_source()",
+    "trace_summary": [
+      "filename source marked at PoC line 9",
+      "filename passed to FormParser(..., file_name=filename, ...) at PoC line 16/20",
+      "CTPC propagates filename-derived path facts through FormParser/File access paths",
+      "CTPC maps parser.write boundary to virtual_final_sink=open"
+    ]
+  },
+  "known_chain": {
+    "source_doc": "py-result/py-report/tool-cve-breakpoint-matrix.md",
+    "steps": [
+      "poc_cve_2026_24486_python_multipart.py:9 filename = source()",
+      "poc_cve_2026_24486_python_multipart.py:16 FormParser(... file_name=filename ...)",
+      "multipart.py:1556-1559 on_start closure captures file_name and calls FileClass(file_name, ...)",
+      "multipart.py:1578-1579 callbacks={\"on_start\": on_start, ...}",
+      "poc_cve_2026_24486_python_multipart.py:23 parser.write(...)",
+      "multipart.py:475 path = os.path.join(file_dir, fname)",
+      "multipart.py:478 open(path, \"w+b\")"
+    ],
+    "known_final_sink": "open(path, \"w+b\")"
+  },
+  "comparison": {
+    "source_matches": true,
+    "constructor_boundary_matches": true,
+    "callback_dispatch_represented_by_ccec": true,
+    "path_propagation_represented_by_ctpc": true,
+    "final_sink_matches": true,
+    "physical_open_line_materialized": false,
+    "explanation": "The final finding is constrained to one semantic final sink, open. The current analyzer reports at parser.write with CTPC virtual_final_sink=open because callback bodies are not physically materialized to multipart.py:478 yet."
+  },
+  "verdict": "matched_semantic_final_sink_with_virtual_boundary"
+}

@@ -88,12 +88,13 @@ through `--oracle` or `--oracle-root`. If no oracle exists, the report records
 `reported_without_oracle` or `not_reported_without_oracle` based on the final
 full-case YASA result.
 
-Optional LLM automation uses any OpenAI-compatible chat-completions API. Keep
-API keys out of the repository:
+Optional LLM automation is configured for the Asia OpenAI-compatible
+chat-completions endpoint documented at https://llm-api.apifox.cn/llm-api-quickstart.
+Keep API keys out of the repository:
 
 ```bash
-export LAPIS_LLM_BASE_URL=https://your-openai-compatible-provider.example/v1
-export LAPIS_LLM_MODEL=your-model-name
+export LAPIS_LLM_BASE_URL=https://llm-api.net/v1
+export LAPIS_LLM_MODEL=gpt-5
 export LAPIS_LLM_API_KEY=...
 
 PYTHONPATH=/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Core/src \
@@ -105,8 +106,8 @@ For one-off tests without exporting a key:
 ```bash
 PYTHONPATH=/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Core/src \
 python3 -m lapis llm-smoke-test \
-  --base-url https://your-openai-compatible-provider.example/v1 \
-  --model your-model-name \
+  --base-url https://llm-api.net/v1 \
+  --model gpt-5 \
   --api-key-stdin
 ```
 
@@ -122,6 +123,30 @@ python3 -m lapis run-end-to-end-case \
   --uast-sdk-path /home/ubuntu/llm-yasa-repair/YASA-Engine-upstream/uast4py-linux-amd64 \
   --llm-auto
 ```
+
+To validate LLM-backed automation across the whole dataset, use the feasibility
+suite. It first smoke-tests the configured LLM API, then runs the full E2E case
+suite with LLM synthesis enabled. The API key is read from stdin here and is not
+written to the report. When the default Asia endpoint is used, the command also
+tries the global fallback endpoint `https://api.n1n.ai/v1` before marking the
+LLM unreachable:
+
+```bash
+PYTHONPATH=/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Core/src \
+python3 -m lapis run-llm-feasibility-suite \
+  --tool-dir /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Tool \
+  --cases-root /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases \
+  --out-dir /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/llm-feasibility \
+  --uast-sdk-path /home/ubuntu/llm-yasa-repair/YASA-Engine-upstream/uast4py-linux-amd64 \
+  --base-url https://llm-api.net/v1 \
+  --model gpt-5 \
+  --llm-connectivity-timeout-seconds 3 \
+  --api-key-stdin
+```
+
+The command writes `llm_feasibility_report.json`,
+`llm_feasibility_report.md`, and, when the smoke test passes,
+`e2e/end_to_end_suite_report.json`.
 
 Expected routing:
 

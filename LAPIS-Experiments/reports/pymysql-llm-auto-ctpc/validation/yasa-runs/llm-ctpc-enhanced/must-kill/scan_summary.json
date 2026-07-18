@@ -1,0 +1,75 @@
+{
+  "projectName": "must-kill",
+  "projectPath": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/pymysql-llm-auto-ctpc/validation/must-kill/",
+  "yasaVersion": "0.3.1",
+  "parallelWorkers": 1,
+  "cgAlgorithm": "DEFAULT",
+  "dumpAllCG": false,
+  "dumpAST": false,
+  "scanStartTime": "2026-07-18T07:56:47.324Z",
+  "scanEndTime": "2026-07-18T07:56:48.823Z",
+  "findingCount": 0,
+  "language": "python",
+  "fileCount": 1,
+  "lineCount": 22,
+  "totalTimeMs": 1499,
+  "markedSourceCount": 1,
+  "matchedSinkCount": 2,
+  "entryPointCount": 1,
+  "parseMs": 1084,
+  "parseCodeMs": 1050,
+  "preloadMs": 3,
+  "processModuleMs": 17,
+  "startAnalyzeMs": 6,
+  "symbolInterpretMs": 85,
+  "execCount": 76,
+  "execInstCount": 71,
+  "avgExecTimePerInst": 0,
+  "avgInstExecCount": 1.0704225352112675,
+  "execTimeP70Ms": 0,
+  "execTimeP99Ms": 0,
+  "execTimeP100Ms": 0,
+  "execTimesP70": 1,
+  "execTimesP99": 2,
+  "execTimesP100": 2,
+  "ruleConfig": [
+    {
+      "checkerIds": [
+        "taint_flow_python_input_inner"
+      ],
+      "sources": {
+        "FuncCallReturnValueTaintSource": [
+          {
+            "fsig": "source",
+            "values": [
+              "0"
+            ],
+            "scopeFile": "all",
+            "scopeFunc": "all"
+          }
+        ]
+      },
+      "sinks": {
+        "FuncCallTaintSink": [
+          {
+            "args": [
+              "0"
+            ],
+            "attribute": "lapis-must-kill-sink",
+            "fsig": "sink"
+          }
+        ]
+      },
+      "entrypoints": [
+        {
+          "filePath": "/case.py",
+          "functionName": "test",
+          "attribute": "lapis-must-kill"
+        }
+      ],
+      "outputAtTaint": {
+        "traceStrategy": "full"
+      }
+    }
+  ]
+}

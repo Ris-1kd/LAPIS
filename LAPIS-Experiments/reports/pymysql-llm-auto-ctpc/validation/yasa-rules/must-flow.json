@@ -1,0 +1,40 @@
+[
+  {
+    "checkerIds": [
+      "taint_flow_python_input_inner"
+    ],
+    "sources": {
+      "FuncCallReturnValueTaintSource": [
+        {
+          "fsig": "source",
+          "values": [
+            "0"
+          ],
+          "scopeFile": "all",
+          "scopeFunc": "all"
+        }
+      ]
+    },
+    "sinks": {
+      "FuncCallTaintSink": [
+        {
+          "args": [
+            "0"
+          ],
+          "attribute": "lapis-must-flow-sink",
+          "fsig": "sink"
+        }
+      ]
+    },
+    "entrypoints": [
+      {
+        "filePath": "/case.py",
+        "functionName": "test",
+        "attribute": "lapis-must-flow"
+      }
+    ],
+    "outputAtTaint": {
+      "traceStrategy": "full"
+    }
+  }
+]

@@ -270,6 +270,94 @@ function rulesForCurrentSink(node: any, sinkRule: any): any[] {
   })
 }
 
+function hasVirtualFinalSinkBoundary(node: any): boolean {
+  if (!enabled()) return false
+  const callText = pretty(node)
+  const call = callExpressionParts(callText)
+  const actual = call?.callee || ''
+  return genericPropagationRules('sink').some((rule: any) => {
+    const virtualFinalSink = rule.pattern?.virtual_final_sink
+    const callee = rule.pattern?.callee
+    return !!virtualFinalSink && evidenceMatchesNode(rule, node) && (!callee || calleeMatches(actual, callee))
+  })
+}
+
+function evidenceMatchesNode(rule: any, node: any): boolean {
+  const evidenceFile = rule?.evidence?.file
+  if (!evidenceFile) return true
+  const sourceFile = String(node?.loc?.sourcefile || '')
+  const normalizedEvidence = String(evidenceFile).replace(/\\/g, '/')
+  const normalizedSource = sourceFile.replace(/\\/g, '/')
+  if (!normalizedSource.endsWith(normalizedEvidence)) return false
+  const evidenceLine = Number(rule?.evidence?.line)
+  return !Number.isFinite(evidenceLine) || evidenceLine === node?.loc?.start?.line
+}
+
+function evaluatePythonVirtualFinalSinkBoundary(node: any, configuredSinkRules: any[]): CtpcDecision {
+  if (!enabled()) {
+    return { enabled: false, matched: false, action: 'none', reason: 'ctpc disabled' }
+  }
+  const facts = factsFor(node?.loc?.sourcefile)
+  const callText = pretty(node)
+  const call = callExpressionParts(callText)
+  if (!call) {
+    return { enabled: true, matched: false, action: 'none', reason: 'not a call expression' }
+  }
+  const virtualBoundaryRule = genericPropagationRules('sink').find((rule: any) => {
+    const virtualFinalSink = rule.pattern?.virtual_final_sink
+    const callee = rule.pattern?.callee
+    return !!virtualFinalSink && evidenceMatchesNode(rule, node) && (!callee || calleeMatches(call.callee, callee))
+  })
+  if (!virtualBoundaryRule) {
+    return { enabled: true, matched: false, action: 'none', reason: 'no ctpc virtual final sink boundary' }
+  }
+  const finalSink = String(virtualBoundaryRule.pattern?.virtual_final_sink || '')
+  const configuredFinalSink = (configuredSinkRules || []).find((rule: any) => calleeMatches(finalSink, rule?.fsig))
+  if (!configuredFinalSink) {
+    const decision = {
+      enabled: true,
+      matched: true,
+      action: 'suppress' as const,
+      reason: `ctpc virtual final sink ${finalSink} is not present in configured sink rules`,
+    }
+    appendDiagnostics(decision, node, { fsig: finalSink || '<virtual-final-sink>' })
+    return decision
+  }
+  const sqlFacts = globalFactValues('sqlStructureVars')
+  const genericRiskFacts = globalFactValues('genericFacts').filter((fact) => !!fact.riskKind)
+  const riskFacts = [...sqlFacts, ...genericRiskFacts]
+  let decision: CtpcDecision
+  if (facts.killGuards.length > 0) {
+    decision = {
+      enabled: true,
+      matched: true,
+      action: 'suppress',
+      reason: 'ctpc kill condition matched',
+      sourceLine: facts.killGuards[0].sourceLine,
+    }
+  } else if (riskFacts.length > 0) {
+    const fact = riskFacts[0]
+    decision = {
+      enabled: true,
+      matched: true,
+      action: 'force',
+      reason: `ctpc access-path propagation reached ${fact.riskKind || 'risk'} value ${fact.symbol}`,
+      sourceLine: fact.sourceLine,
+      finalSink,
+      sinkAttribute: `LAPIS CTPC virtual sink: ${finalSink}`,
+    }
+  } else {
+    decision = {
+      enabled: true,
+      matched: true,
+      action: 'suppress',
+      reason: 'ctpc virtual final sink boundary has no validated access-path facts',
+    }
+  }
+  appendDiagnostics(decision, node, configuredFinalSink)
+  return decision
+}
+
 function callExpressionParts(callText: string): { callee: string; args: string[] } | undefined {
   const match = callText.match(/([A-Za-z_][A-Za-z0-9_.]*)\s*\((.*)\)\s*$/)
   if (!match) return undefined
@@ -629,6 +717,11 @@ function evaluatePythonSink(node: any, rule: any): CtpcDecision {
   const genericRiskFacts = globalFactValues('genericFacts').filter((fact) => !!fact.riskKind)
   const riskFacts = [...sqlFacts, ...genericRiskFacts]
   const currentSinkRules = rulesForCurrentSink(node, rule)
+  const virtualBoundaryRule = currentSinkRules.find((item: any) => item.pattern?.virtual_final_sink)
+  const call = callExpressionParts(pretty(node))
+  const argIndex = Number(rule?.args?.[0] || 0)
+  const sinkArgText = call?.args?.[argIndex] || call?.args?.[0] || ''
+  const sinkArgRiskFact = sourceFactForExpression(facts, sinkArgText)
   let decision: CtpcDecision
   if (facts.killGuards.length > 0) {
     decision = {
@@ -638,8 +731,8 @@ function evaluatePythonSink(node: any, rule: any): CtpcDecision {
       reason: 'ctpc kill condition matched',
       sourceLine: facts.killGuards[0].sourceLine,
     }
-  } else if (riskFacts.length > 0 && currentSinkRules.length > 0) {
-    const fact = riskFacts[0]
+  } else if (sinkArgRiskFact || (virtualBoundaryRule && riskFacts.length > 0)) {
+    const fact = sinkArgRiskFact || riskFacts[0]
     const finalSink = currentSinkRules.find((item: any) => item.pattern?.virtual_final_sink)?.pattern?.virtual_final_sink
       || currentSinkRules.find((item: any) => item.to?.expr)?.to?.expr
       || rule?.fsig
@@ -703,6 +796,8 @@ function appendDiagnostics(decision: CtpcDecision, node: any, rule: any): void {
 
 module.exports = {
   evaluatePythonSink,
+  evaluatePythonVirtualFinalSinkBoundary,
+  hasVirtualFinalSinkBoundary,
   recordAssignment,
   recordBinaryOperation,
   recordFunctionCall,

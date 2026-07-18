@@ -1,0 +1,207 @@
+{
+  "schema_version": "ctpc.v2",
+  "contract_name": "python_multipart_filename_access_path_to_open",
+  "gap_type": [
+    "missing_access_path_propagation"
+  ],
+  "applies_to": {
+    "language": "python",
+    "risk_kind": "path_traversal"
+  },
+  "fact_types": [
+    {
+      "name": "user_controlled_path",
+      "shape": {
+        "access_path": "string"
+      }
+    }
+  ],
+  "propagation_edges": [
+    {
+      "edge_id": "e1_constructor_keyword_capture",
+      "event": "function_call",
+      "pattern": {
+        "kind": "constructor_keyword_capture",
+        "callee": "FormParser",
+        "argument_index": 0
+      },
+      "from": {
+        "fact": "user_controlled_path",
+        "expr": "filename"
+      },
+      "to": {
+        "fact": "user_controlled_path",
+        "expr": "file_name",
+        "access_path": "FormParser.file_name",
+        "risk_kind": "path_traversal"
+      },
+      "evidence": {
+        "file": "poc/poc_cve_2026_24486_python_multipart.py",
+        "line": 20,
+        "code": "file_name=filename,"
+      },
+      "description": "Capture the user-controlled filename passed via the FormParser constructor keyword file_name."
+    },
+    {
+      "edge_id": "e2_file_init_base",
+      "event": "assignment",
+      "pattern": {
+        "kind": "direct_assignment",
+        "argument_index": 0
+      },
+      "from": {
+        "fact": "user_controlled_path",
+        "expr": "file_name"
+      },
+      "to": {
+        "fact": "user_controlled_path",
+        "expr": "self._file_base",
+        "access_path": "self._file_base",
+        "risk_kind": "path_traversal"
+      },
+      "evidence": {
+        "file": "python_multipart/multipart.py",
+        "line": 379,
+        "code": "self._file_base = base"
+      },
+      "description": "File.__init__ stores the splitext base derived from file_name into self._file_base."
+    },
+    {
+      "edge_id": "e3_file_init_ext",
+      "event": "assignment",
+      "pattern": {
+        "kind": "direct_assignment",
+        "argument_index": 0
+      },
+      "from": {
+        "fact": "user_controlled_path",
+        "expr": "file_name"
+      },
+      "to": {
+        "fact": "user_controlled_path",
+        "expr": "self._ext",
+        "access_path": "self._ext",
+        "risk_kind": "path_traversal"
+      },
+      "evidence": {
+        "file": "python_multipart/multipart.py",
+        "line": 380,
+        "code": "self._ext = ext"
+      },
+      "description": "File.__init__ stores the splitext extension derived from file_name into self._ext."
+    },
+    {
+      "edge_id": "e4_fname_from_base_ext",
+      "event": "assignment",
+      "pattern": {
+        "kind": "direct_assignment",
+        "argument_index": 0
+      },
+      "from": {
+        "fact": "user_controlled_path",
+        "expr": "self._file_base"
+      },
+      "to": {
+        "fact": "user_controlled_path",
+        "expr": "fname",
+        "access_path": "fname",
+        "risk_kind": "path_traversal"
+      },
+      "evidence": {
+        "file": "python_multipart/multipart.py",
+        "line": 473,
+        "code": "fname = self._file_base + self._ext if keep_extensions else self._file_base"
+      },
+      "description": "Filename component propagated into fname; under keep_extensions it includes extension, otherwise just base."
+    },
+    {
+      "edge_id": "e5_path_join_keep_filename",
+      "event": "function_call",
+      "pattern": {
+        "kind": "path_join_keep_filename",
+        "argument_index": 1
+      },
+      "from": {
+        "fact": "user_controlled_path",
+        "expr": "fname"
+      },
+      "to": {
+        "fact": "user_controlled_path",
+        "expr": "path",
+        "access_path": "path",
+        "risk_kind": "path_traversal"
+      },
+      "evidence": {
+        "file": "python_multipart/multipart.py",
+        "line": 475,
+        "code": "path = os.path.join(file_dir, fname)  # type: ignore[arg-type]"
+      },
+      "description": "Join the preserved filename into a filesystem path only when the keep_filename branch is active."
+    },
+    {
+      "edge_id": "e6_open_sink_path",
+      "event": "sink",
+      "pattern": {
+        "kind": "filesystem_sink_argument",
+        "callee": "open",
+        "argument_index": 0
+      },
+      "from": {
+        "fact": "user_controlled_path",
+        "expr": "path"
+      },
+      "to": {
+        "fact": "user_controlled_path",
+        "expr": "open(path)",
+        "access_path": "path",
+        "risk_kind": "path_traversal"
+      },
+      "evidence": {
+        "file": "python_multipart/multipart.py",
+        "line": 478,
+        "code": "tmp_file = open(path, \"w+b\")"
+      },
+      "description": "Filesystem write sink consumes the derived path."
+    },
+    {
+      "edge_id": "e7_virtual_callback_boundary_to_open",
+      "event": "sink",
+      "pattern": {
+        "kind": "filesystem_sink_argument",
+        "callee": "parser.write",
+        "argument_index": 0,
+        "virtual_final_sink": "open"
+      },
+      "from": {
+        "fact": "user_controlled_path",
+        "expr": "file_name"
+      },
+      "to": {
+        "fact": "user_controlled_path",
+        "expr": "open(path)",
+        "access_path": "path",
+        "risk_kind": "path_traversal"
+      },
+      "evidence": {
+        "file": "poc/poc_cve_2026_24486_python_multipart.py",
+        "line": 23,
+        "code": "return parser.write(b\"file-content\")"
+      },
+      "description": "When callback bodies cannot be materialized post-CCEC, bind the observed parser.write boundary to the local final sink open, using the previously captured file_name-derived path fact (not the data bytes)."
+    }
+  ],
+  "function_summaries": [],
+  "risk_upgrades": [],
+  "kill_conditions": [],
+  "validation_expectations": {
+    "must_flow": "finding",
+    "must_not_flow": "no_finding",
+    "must_kill": "no_finding"
+  },
+  "description": "Repairs the missing access-path propagation for python-multipart where a user-controlled filename is captured via FormParser(..., file_name=filename), split into self._file_base/self._ext, assembled into fname, joined into a filesystem path, and written via open(path, \"w+b\"). Propagation uses guarded path_join_keep_filename to honor the keep_filename branch. A virtual boundary-to-sink mapping from parser.write to open is provided only to bridge unmaterialized callback bodies without treating the write data as the source.",
+  "notes": [
+    "Guarded propagation is enforced by path_join_keep_filename, which applies under the keep_filename branch.",
+    "Do not infer taint from parser.write data bytes; the virtual sink edge binds the pre-existing file_name-derived path fact at the callback boundary to the final open sink.",
+    "Without a provided file_name, File.__init__ may generate a temporary name; this contract only propagates when file_name is supplied as evidenced."
+  ]
+}

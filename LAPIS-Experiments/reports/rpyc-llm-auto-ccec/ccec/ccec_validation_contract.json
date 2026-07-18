@@ -1,0 +1,245 @@
+{
+  "schema_version": "lapis.ccec_validation_contract.v1",
+  "case_id": "cve-2024-27758-rpyc",
+  "validated_ccec_edges": [
+    "array-boundary-to-generated-method",
+    "array-generated-method-to-pickle-loads"
+  ],
+  "must_link": [
+    {
+      "name": "array-boundary-to-generated-method_must_link",
+      "expected": "edge_present",
+      "caller": "numpy_like_array_coercion [poc_cve_2024_27758_rpyc.py : 19_21]",
+      "callsite": "array_callback()",
+      "callee": "rpyc.core.netref._make_method.<generated __array__>",
+      "required_guards": [
+        "callback is obtained dynamically through getattr",
+        "the observed boundary invokes the dynamically obtained callback",
+        "factory receives method metadata for __array__",
+        "_make_method materializes the observed dynamic method"
+      ],
+      "graph_progress": {
+        "from_frontier": "array_callback()",
+        "to_frontier": "rpyc.core.netref._make_method.<generated __array__>"
+      },
+      "evidence": [
+        "poc/poc_cve_2024_27758_rpyc.py:20 obtains __array__ with getattr",
+        "poc/poc_cve_2024_27758_rpyc.py:21 calls array_callback()",
+        "poc/poc_cve_2024_27758_rpyc.py:26 registers __array__ in factory metadata",
+        "rpyc/core/netref.py:251 defines the factory branch for __array__"
+      ]
+    },
+    {
+      "name": "array-generated-method-to-pickle-loads_must_link",
+      "expected": "edge_present",
+      "caller": "rpyc.core.netref._make_method.<generated __array__>",
+      "callsite": "pickle.loads(syncreq(self, consts.HANDLE_PICKLE, -1))",
+      "callee": "pickle.loads",
+      "required_guards": [
+        "generated __array__ body contains pickle.loads",
+        "the configured final sink fsig is pickle.loads"
+      ],
+      "graph_progress": {
+        "from_frontier": "pickle.loads(syncreq(self, consts.HANDLE_PICKLE, -1))",
+        "to_frontier": "pickle.loads"
+      },
+      "evidence": [
+        "rpyc/core/netref.py:252 defines generated __array__ inside _make_method",
+        "rpyc/core/netref.py:255 calls final sink pickle.loads(syncreq(self, consts.HANDLE_PICKLE, -1))"
+      ]
+    }
+  ],
+  "must_not_link": [
+    {
+      "name": "array-boundary-to-generated-method_must_not_link",
+      "expected": "edge_absent",
+      "caller": "numpy_like_array_coercion [poc_cve_2024_27758_rpyc.py : 19_21]",
+      "callsite": "__str__ callback",
+      "callee": "rpyc.core.netref._make_method.<generated __array__>",
+      "reason": "method metadata does not include __array__",
+      "violated_guard": "factory call registers method tuple whose first item is '__array__'",
+      "evidence": [
+        "poc/poc_cve_2024_27758_rpyc.py:20 obtains __array__ with getattr",
+        "poc/poc_cve_2024_27758_rpyc.py:21 calls array_callback()",
+        "poc/poc_cve_2024_27758_rpyc.py:26 registers __array__ in factory metadata",
+        "rpyc/core/netref.py:251 defines the factory branch for __array__"
+      ]
+    },
+    {
+      "name": "array-generated-method-to-pickle-loads_must_not_link",
+      "expected": "edge_absent",
+      "caller": "rpyc.core.netref._make_method.<generated __array__>",
+      "callsite": "json.loads(\"payload\")",
+      "callee": "pickle.loads",
+      "reason": "sink call is not pickle.loads",
+      "violated_guard": "the configured final sink fsig is pickle.loads",
+      "evidence": [
+        "rpyc/core/netref.py:252 defines generated __array__ inside _make_method",
+        "rpyc/core/netref.py:255 calls final sink pickle.loads(syncreq(self, consts.HANDLE_PICKLE, -1))"
+      ]
+    }
+  ],
+  "must_kill": [
+    {
+      "name": "array-boundary-to-generated-method_must_kill",
+      "expected": "edge_suppressed",
+      "caller": "numpy_like_array_coercion [poc_cve_2024_27758_rpyc.py : 19_21]",
+      "callsite": "other_callback()",
+      "callee": "rpyc.core.netref._make_method.<generated __array__>",
+      "kill_condition": "boundary callsite is not array_callback()",
+      "reason": "CCEC guard is not satisfied",
+      "evidence": [
+        "poc/poc_cve_2024_27758_rpyc.py:20 obtains __array__ with getattr",
+        "poc/poc_cve_2024_27758_rpyc.py:21 calls array_callback()",
+        "poc/poc_cve_2024_27758_rpyc.py:26 registers __array__ in factory metadata",
+        "rpyc/core/netref.py:251 defines the factory branch for __array__"
+      ]
+    },
+    {
+      "name": "array-generated-method-to-pickle-loads_must_kill",
+      "expected": "edge_suppressed",
+      "caller": "rpyc.core.netref._make_method.<generated __array__>",
+      "callsite": "generated_str()",
+      "callee": "pickle.loads",
+      "kill_condition": "generated closure is not __array__",
+      "reason": "CCEC guard is not satisfied",
+      "evidence": [
+        "rpyc/core/netref.py:252 defines generated __array__ inside _make_method",
+        "rpyc/core/netref.py:255 calls final sink pickle.loads(syncreq(self, consts.HANDLE_PICKLE, -1))"
+      ]
+    }
+  ],
+  "local_samples": {
+    "must-link": [
+      {
+        "name": "array-boundary-to-generated-method_must_link",
+        "expected": "edge_present",
+        "edge_id": "array-boundary-to-generated-method",
+        "caller": "numpy_like_array_coercion [poc_cve_2024_27758_rpyc.py : 19_21]",
+        "callsite": "array_callback()",
+        "callee": "rpyc.core.netref._make_method.<generated __array__>",
+        "required_guards": [
+          "callback is obtained dynamically through getattr",
+          "the observed boundary invokes the dynamically obtained callback",
+          "factory receives method metadata for __array__",
+          "_make_method materializes the observed dynamic method"
+        ],
+        "guards": [
+          "callback is obtained dynamically through getattr",
+          "the observed boundary invokes the dynamically obtained callback",
+          "factory receives method metadata for __array__",
+          "_make_method materializes the observed dynamic method"
+        ],
+        "graph_progress": {
+          "from_frontier": "array_callback()",
+          "to_frontier": "rpyc.core.netref._make_method.<generated __array__>"
+        },
+        "code": "def _make_method(name, doc):\n    if name == \"__array__\":\n        def __array__(self):\n            return \"pickle.loads boundary\"\n        return __array__\n    return lambda self: None\n\ndef class_factory(methods):\n    namespace = {}\n    for name, doc in methods:\n        namespace[name] = _make_method(name, doc)\n    return type(\"Netref\", (), namespace)\n\ndef sample():\n    obj = class_factory([(\"__array__\", \"array protocol\")])()\n    array_callback = getattr(obj, \"__array__\")\n    return array_callback()",
+        "evidence": [
+          "poc/poc_cve_2024_27758_rpyc.py:20 obtains __array__ with getattr",
+          "poc/poc_cve_2024_27758_rpyc.py:21 calls array_callback()",
+          "poc/poc_cve_2024_27758_rpyc.py:26 registers __array__ in factory metadata",
+          "rpyc/core/netref.py:251 defines the factory branch for __array__"
+        ]
+      },
+      {
+        "name": "array-generated-method-to-pickle-loads_must_link",
+        "expected": "edge_present",
+        "edge_id": "array-generated-method-to-pickle-loads",
+        "caller": "rpyc.core.netref._make_method.<generated __array__>",
+        "callsite": "pickle.loads(syncreq(self, consts.HANDLE_PICKLE, -1))",
+        "callee": "pickle.loads",
+        "required_guards": [
+          "generated __array__ body contains pickle.loads",
+          "the configured final sink fsig is pickle.loads"
+        ],
+        "guards": [
+          "generated __array__ body contains pickle.loads",
+          "the configured final sink fsig is pickle.loads"
+        ],
+        "graph_progress": {
+          "from_frontier": "pickle.loads(syncreq(self, consts.HANDLE_PICKLE, -1))",
+          "to_frontier": "pickle.loads"
+        },
+        "code": "class PickleLike:\n    def loads(self, value):\n        return value\n\npickle = PickleLike()\n\ndef generated_array(self):\n    return pickle.loads(\"payload\")\n\ndef sample():\n    return generated_array(object())",
+        "evidence": [
+          "rpyc/core/netref.py:252 defines generated __array__ inside _make_method",
+          "rpyc/core/netref.py:255 calls final sink pickle.loads(syncreq(self, consts.HANDLE_PICKLE, -1))"
+        ]
+      }
+    ],
+    "must-not-link": [
+      {
+        "name": "array-boundary-to-generated-method_must_not_link",
+        "expected": "edge_absent",
+        "edge_id": "array-boundary-to-generated-method",
+        "caller": "numpy_like_array_coercion [poc_cve_2024_27758_rpyc.py : 19_21]",
+        "callsite": "__str__ callback",
+        "callee": "rpyc.core.netref._make_method.<generated __array__>",
+        "reason": "method metadata does not include __array__",
+        "violated_guard": "factory call registers method tuple whose first item is '__array__'",
+        "code": "def _make_method(name, doc):\n    if name == \"__array__\":\n        def __array__(self):\n            return \"pickle.loads boundary\"\n        return __array__\n    return lambda self: None\n\ndef class_factory(methods):\n    namespace = {}\n    for name, doc in methods:\n        namespace[name] = _make_method(name, doc)\n    return type(\"Netref\", (), namespace)\n\ndef sample():\n    obj = class_factory([(\"__str__\", \"string protocol\")])()\n    text_callback = getattr(obj, \"__str__\")\n    return text_callback()",
+        "evidence": [
+          "poc/poc_cve_2024_27758_rpyc.py:20 obtains __array__ with getattr",
+          "poc/poc_cve_2024_27758_rpyc.py:21 calls array_callback()",
+          "poc/poc_cve_2024_27758_rpyc.py:26 registers __array__ in factory metadata",
+          "rpyc/core/netref.py:251 defines the factory branch for __array__"
+        ]
+      },
+      {
+        "name": "array-generated-method-to-pickle-loads_must_not_link",
+        "expected": "edge_absent",
+        "edge_id": "array-generated-method-to-pickle-loads",
+        "caller": "rpyc.core.netref._make_method.<generated __array__>",
+        "callsite": "json.loads(\"payload\")",
+        "callee": "pickle.loads",
+        "reason": "sink call is not pickle.loads",
+        "violated_guard": "the configured final sink fsig is pickle.loads",
+        "code": "class JsonLike:\n    def loads(self, value):\n        return value\n\njson = JsonLike()\n\ndef generated_array(self):\n    return json.loads(\"payload\")\n\ndef sample():\n    return generated_array(object())",
+        "evidence": [
+          "rpyc/core/netref.py:252 defines generated __array__ inside _make_method",
+          "rpyc/core/netref.py:255 calls final sink pickle.loads(syncreq(self, consts.HANDLE_PICKLE, -1))"
+        ]
+      }
+    ],
+    "must-kill": [
+      {
+        "name": "array-boundary-to-generated-method_must_kill",
+        "expected": "edge_suppressed",
+        "edge_id": "array-boundary-to-generated-method",
+        "caller": "numpy_like_array_coercion [poc_cve_2024_27758_rpyc.py : 19_21]",
+        "callsite": "other_callback()",
+        "callee": "rpyc.core.netref._make_method.<generated __array__>",
+        "kill_condition": "boundary callsite is not array_callback()",
+        "reason": "CCEC guard is not satisfied",
+        "code": "def _make_method(name, doc):\n    if name == \"__array__\":\n        def __array__(self):\n            return \"pickle.loads boundary\"\n        return __array__\n    return lambda self: None\n\ndef class_factory(methods):\n    namespace = {}\n    for name, doc in methods:\n        namespace[name] = _make_method(name, doc)\n    return type(\"Netref\", (), namespace)\n\ndef sample():\n    obj = class_factory([(\"__array__\", \"array protocol\")])()\n    other_callback = getattr(obj, \"__array__\")\n    return other_callback()",
+        "evidence": [
+          "poc/poc_cve_2024_27758_rpyc.py:20 obtains __array__ with getattr",
+          "poc/poc_cve_2024_27758_rpyc.py:21 calls array_callback()",
+          "poc/poc_cve_2024_27758_rpyc.py:26 registers __array__ in factory metadata",
+          "rpyc/core/netref.py:251 defines the factory branch for __array__"
+        ]
+      },
+      {
+        "name": "array-generated-method-to-pickle-loads_must_kill",
+        "expected": "edge_suppressed",
+        "edge_id": "array-generated-method-to-pickle-loads",
+        "caller": "rpyc.core.netref._make_method.<generated __array__>",
+        "callsite": "generated_str()",
+        "callee": "pickle.loads",
+        "kill_condition": "generated closure is not __array__",
+        "reason": "CCEC guard is not satisfied",
+        "code": "class PickleLike:\n    def loads(self, value):\n        return value\n\npickle = PickleLike()\n\ndef generated_str(self):\n    return pickle.loads(\"payload\")\n\ndef sample():\n    return generated_str(object())",
+        "evidence": [
+          "rpyc/core/netref.py:252 defines generated __array__ inside _make_method",
+          "rpyc/core/netref.py:255 calls final sink pickle.loads(syncreq(self, consts.HANDLE_PICKLE, -1))"
+        ]
+      }
+    ]
+  },
+  "notes": [
+    "Generated deterministically from the accepted CCEC candidate contract.",
+    "Each candidate edge receives its own must-link, must-not-link, and must-kill local semantic sample.",
+    "The negative samples validate edge-specific guards such as method metadata, boundary callsite, generated closure name, and final sink fsig."
+  ]
+}

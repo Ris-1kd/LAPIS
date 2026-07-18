@@ -1,0 +1,25 @@
+# LAPIS Full-CVE YASA Report
+
+- Label: `llm-auto-ctpc`
+- Case: `cve-2024-36039-pymysql`
+- Status: `reported`
+- Result: `finding`
+- Return code: `0`
+- Tool: `/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Tool`
+- Source path: `/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/propagation_gap/cve-2024-36039-pymysql/dataset`
+- Rule: `/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/propagation_gap/cve-2024-36039-pymysql/rules/final-sink-only.json`
+- CTPC: `/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/pymysql-llm-auto-ctpc/ctpc/ctpc.json`
+- Report dir: `/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/pymysql-llm-auto-ctpc/runs/llm-auto-ctpc/llm-auto-ctpc`
+
+## Summary
+
+- Findings: `1`
+- Sources marked: `1`
+- Sinks matched: `2`
+- Entry points: `1`
+- Files analyzed: `20`
+- Lines analyzed: `4367`
+
+## Interpretation
+
+This is a full original-CVE run. A finding here is evidence that the enhanced analyzer connected the case entrypoint, interprocedural execution context, CTPC access-path facts, and final sink rule on the original dataset.

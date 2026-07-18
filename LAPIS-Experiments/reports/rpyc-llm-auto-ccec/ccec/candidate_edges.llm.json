@@ -1,0 +1,152 @@
+{
+  "schema_version": "lapis.ccec_candidates.v1",
+  "case_id": "cve-2024-27758-rpyc",
+  "gap_type": "connectivity_gap",
+  "repair_branch": "ccec",
+  "ccec_mode": "hard",
+  "generation_mechanism": "llm_synthesized_virtual_or_materialized_edge",
+  "llm_role": "Select only the evidence-backed suggested virtual/materialized edges, preserve their guards, and avoid inventing any unrelated call edges.",
+  "candidate_edges": [
+    {
+      "edge_id": "array-boundary-to-generated-method",
+      "caller": "numpy_like_array_coercion [poc_cve_2024_27758_rpyc.py : 19_21]",
+      "callsite": "array_callback()",
+      "boundary_callsite": "array_callback()",
+      "callee": "rpyc.core.netref._make_method.<generated __array__>",
+      "callee_kind": "materialized_factory_method",
+      "confidence": 0.91,
+      "guards": [
+        "callback is obtained dynamically through getattr",
+        "the observed boundary invokes the dynamically obtained callback",
+        "factory receives method metadata for __array__",
+        "_make_method materializes the observed dynamic method"
+      ],
+      "guard_evidence": [
+        {
+          "condition": "callback is obtained dynamically through getattr",
+          "derived_from": "ast_callsite",
+          "evidence": {
+            "file": "poc/poc_cve_2024_27758_rpyc.py",
+            "line": 20,
+            "code": "array_callback = getattr(obj, \"__array__\")"
+          }
+        },
+        {
+          "condition": "the observed boundary invokes the dynamically obtained callback",
+          "derived_from": "ast_callsite",
+          "evidence": {
+            "file": "poc/poc_cve_2024_27758_rpyc.py",
+            "line": 21,
+            "code": "array_callback()"
+          }
+        },
+        {
+          "condition": "factory receives method metadata for __array__",
+          "derived_from": "callback_registration",
+          "evidence": {
+            "file": "poc/poc_cve_2024_27758_rpyc.py",
+            "line": 26,
+            "code": "class_factory((\"remote.module.EvilArray\", 1, 0), [(\"__array__\", \"array protocol\")])"
+          }
+        },
+        {
+          "condition": "_make_method materializes the observed dynamic method",
+          "derived_from": "ast_control_flow_guard",
+          "evidence": {
+            "file": "rpyc/core/netref.py",
+            "line": 251,
+            "code": "name == \"__array__\""
+          }
+        }
+      ],
+      "evidence": [
+        "poc/poc_cve_2024_27758_rpyc.py:20 obtains __array__ with getattr",
+        "poc/poc_cve_2024_27758_rpyc.py:21 calls array_callback()",
+        "poc/poc_cve_2024_27758_rpyc.py:26 registers __array__ in factory metadata",
+        "rpyc/core/netref.py:251 defines the factory branch for __array__"
+      ],
+      "contract": {
+        "preconditions": [
+          "getattr(obj, '__array__') returns a dynamically generated __array__ method",
+          "factory call registers method tuple whose first item is '__array__'",
+          "_make_method branches on '__array__' and materializes an inner method",
+          "the boundary callsite invokes array_callback()"
+        ],
+        "effects": [
+          {
+            "kind": "add_call_edge",
+            "from": "numpy_like_array_coercion [poc_cve_2024_27758_rpyc.py : 19_21]",
+            "to": "rpyc.core.netref._make_method.<generated __array__>",
+            "at": "array_callback()"
+          }
+        ],
+        "must_not_apply_when": [
+          "method metadata does not include __array__",
+          "the boundary callsite is not array_callback()",
+          "the generated method body does not come from the __array__ branch"
+        ]
+      }
+    },
+    {
+      "edge_id": "array-generated-method-to-pickle-loads",
+      "caller": "rpyc.core.netref._make_method.<generated __array__>",
+      "callsite": "pickle.loads(syncreq(self, consts.HANDLE_PICKLE, -1))",
+      "callee": "pickle.loads",
+      "callee_kind": "builtin_sink",
+      "confidence": 0.94,
+      "guards": [
+        "generated __array__ body contains pickle.loads",
+        "the configured final sink fsig is pickle.loads"
+      ],
+      "guard_evidence": [
+        {
+          "condition": "generated __array__ reaches final sink pickle.loads",
+          "derived_from": "ast_callsite",
+          "evidence": {
+            "file": "rpyc/core/netref.py",
+            "line": 255,
+            "code": "pickle.loads(syncreq(self, consts.HANDLE_PICKLE, -1))"
+          }
+        }
+      ],
+      "evidence": [
+        "rpyc/core/netref.py:252 defines generated __array__ inside _make_method",
+        "rpyc/core/netref.py:255 calls final sink pickle.loads(syncreq(self, consts.HANDLE_PICKLE, -1))"
+      ],
+      "contract": {
+        "preconditions": [
+          "execution is inside generated __array__",
+          "the configured final sink fsig is pickle.loads"
+        ],
+        "effects": [
+          {
+            "kind": "add_call_edge",
+            "from": "rpyc.core.netref._make_method.<generated __array__>",
+            "to": "pickle.loads",
+            "at": "pickle.loads(syncreq(self, consts.HANDLE_PICKLE, -1))"
+          }
+        ],
+        "must_not_apply_when": [
+          "the generated closure is not __array__",
+          "the sink call is not pickle.loads"
+        ]
+      }
+    }
+  ],
+  "ranking": {
+    "top_k": 2,
+    "ranking_reason": [
+      "The evidence already names the exact virtual/materialized edges, so no broader ranking search is needed.",
+      "The boundary-to-generated-method edge is the frontier repair; the pickle.loads edge is the downstream materialized sink edge."
+    ]
+  },
+  "validation_expectations": {
+    "structural": "callee exists or can be materialized from evidence",
+    "graph_progress": "source frontier advances beyond the symbolic/dangling callsite",
+    "taint_progress": "source becomes closer to sink; possible propagation gaps require post-CCEC rediagnosis"
+  },
+  "dataflow_still_required": false,
+  "notes": [
+    "Used only the two suggested virtual/materialized edges from the static evidence; no unrelated call edges were added."
+  ]
+}

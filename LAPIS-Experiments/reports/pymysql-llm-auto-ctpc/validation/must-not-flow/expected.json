@@ -1,0 +1,4 @@
+{
+  "name": "pymysql_mapping_value_must_not_flow",
+  "expected": "no_finding"
+}

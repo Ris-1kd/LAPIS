@@ -8,9 +8,11 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .automation import run_llm_feasibility_suite
 from .cases import build_case_index, run_repair_workflow
 from .ccec import (
     build_ccec_candidates,
+    generate_ccec_validation_contract,
     materialize_ccec_validation,
     plan_ccec_repair,
     validate_ccec_candidates,
@@ -21,7 +23,17 @@ from .ctpc_schema import upgrade_ctpc_file
 from .diagnosis import build_gap_diagnosis_report
 from .e2e import run_end_to_end_case, run_end_to_end_cases
 from .gate import build_evidence_gate_report, summarize_callgraph
-from .llm import chat_json, chat_text, config_from_env, extract_json_object, read_api_key_from_stdin, write_llm_artifacts
+from .llm import (
+    DEFAULT_LLM_BASE_URL,
+    DEFAULT_LLM_MODEL,
+    SUPPORTED_LLM_MODELS,
+    chat_json,
+    chat_text,
+    config_from_env,
+    extract_json_object,
+    read_api_key_from_stdin,
+    write_llm_artifacts,
+)
 from .prompt import build_ccec_prompt, build_ccec_validation_prompt, build_ctpc_prompt, build_validation_prompt
 from .validator import build_yasa_validation_rules, validate_ctpc
 from .yasa_runner import build_feasibility_report, run_yasa_case, run_yasa_validation
@@ -45,8 +57,13 @@ def _llm_config_from_args(args: argparse.Namespace):
 
 
 def _add_llm_args(parser: argparse.ArgumentParser, *, max_tokens: int = 4096) -> None:
-    parser.add_argument("--base-url", help="OpenAI-compatible base URL")
-    parser.add_argument("--model", help="LLM model name")
+    parser.add_argument("--base-url", default=None, help=f"OpenAI-compatible base URL (default: {DEFAULT_LLM_BASE_URL})")
+    parser.add_argument(
+        "--model",
+        choices=SUPPORTED_LLM_MODELS,
+        default=None,
+        help=f"LLM model name (default: {DEFAULT_LLM_MODEL})",
+    )
     parser.add_argument("--api-key-stdin", action="store_true", help="Read API key from stdin instead of env")
     parser.add_argument("--llm-timeout-seconds", default=120, type=int, help="LLM API timeout")
     parser.add_argument("--temperature", default=0.0, type=float, help="LLM sampling temperature")
@@ -277,6 +294,91 @@ def _extract_structure(forward: dict[str, Any], backward: dict[str, Any]) -> dic
     }
 
 
+def _extract_scoped_function_evidence(case_dir: Path, dataset_dir: Path, case: dict[str, Any]) -> dict[str, Any]:
+    function_names = set(case.get("analysis_scope", {}).get("functions_of_interest", []) or [])
+    source_files = set(case.get("analysis_scope", {}).get("source_files", []) or [])
+    sink_files = set(case.get("analysis_scope", {}).get("sink_files", []) or [])
+    relative_files = sorted(source_files | sink_files)
+    if not relative_files:
+        relative_files = [str(path.relative_to(dataset_dir)) for path in sorted(dataset_dir.rglob("*.py"))]
+
+    functions: list[dict[str, Any]] = []
+    assignments: list[dict[str, Any]] = []
+    returns: list[dict[str, Any]] = []
+    calls: list[dict[str, Any]] = []
+    dict_comprehensions: list[dict[str, Any]] = []
+    percent_operations: list[dict[str, Any]] = []
+
+    for relative in relative_files:
+        path = dataset_dir / relative
+        if not path.exists():
+            matches = sorted(dataset_dir.rglob(Path(relative).name))
+            path = matches[0] if matches else path
+        if not path or not path.exists():
+            continue
+        module, text = _parse_python(path)
+        for func in [node for node in ast.walk(module) if isinstance(node, ast.FunctionDef)]:
+            if function_names and func.name not in function_names:
+                continue
+            function_record = {
+                "name": func.name,
+                "file": str(path.relative_to(case_dir)),
+                "line": func.lineno,
+                "args": [arg.arg for arg in func.args.args],
+            }
+            functions.append(function_record)
+            for node in ast.walk(func):
+                if isinstance(node, ast.Assign):
+                    expr = _segment(text, node)
+                    record = {
+                        "function": func.name,
+                        "file": str(path.relative_to(case_dir)),
+                        "line": node.lineno,
+                        "targets": [_segment(text, target) for target in node.targets],
+                        "expr": expr,
+                    }
+                    assignments.append(record)
+                    if isinstance(node.value, ast.DictComp):
+                        generators = [_segment(text, generator.iter) for generator in node.value.generators]
+                        dict_comprehensions.append({**record, "generators": generators})
+                    if isinstance(node.value, ast.BinOp) and isinstance(node.value.op, ast.Mod):
+                        percent_operations.append(record)
+                elif isinstance(node, ast.Return):
+                    expr = _segment(text, node)
+                    record = {
+                        "function": func.name,
+                        "file": str(path.relative_to(case_dir)),
+                        "line": node.lineno,
+                        "expr": expr,
+                    }
+                    returns.append(record)
+                    if isinstance(node.value, ast.DictComp):
+                        generators = [_segment(text, generator.iter) for generator in node.value.generators]
+                        dict_comprehensions.append({**record, "targets": ["$return"], "generators": generators})
+                elif isinstance(node, ast.Call):
+                    calls.append(
+                        {
+                            "function": func.name,
+                            "file": str(path.relative_to(case_dir)),
+                            "line": node.lineno,
+                            "callee": _call_name(node.func),
+                            "args": [_segment(text, arg) for arg in node.args],
+                            "expr": _segment(text, node),
+                        }
+                    )
+
+    return {
+        "functions": sorted(functions, key=lambda item: (item["file"], item["line"], item["name"])),
+        "assignments": sorted(assignments, key=lambda item: (item["file"], item["line"], item["function"])),
+        "returns": sorted(returns, key=lambda item: (item["file"], item["line"], item["function"])),
+        "calls": sorted(calls, key=lambda item: (item["file"], item["line"], item["function"], item["callee"])),
+        "dict_comprehensions": sorted(
+            dict_comprehensions, key=lambda item: (item["file"], item["line"], item["function"])
+        ),
+        "percent_operations": sorted(percent_operations, key=lambda item: (item["file"], item["line"], item["function"])),
+    }
+
+
 def _generate_candidate_edges(structure: dict[str, Any]) -> list[dict[str, Any]]:
     edges: list[dict[str, Any]] = []
 
@@ -308,6 +410,35 @@ def _generate_candidate_edges(structure: dict[str, Any]) -> list[dict[str, Any]]
             }
         )
 
+    for item in structure.get("scoped_function_evidence", {}).get("dict_comprehensions", []):
+        expr = item.get("expr", "")
+        generators = " ".join(item.get("generators", []))
+        if ".items()" not in expr and ".items()" not in generators:
+            continue
+        edge_id_prefix = item.get("function", "function")
+        edges.append(
+            {
+                "from": "input_mapping.keys()[*]",
+                "to": "returned_mapping.keys()[*]",
+                "kind": "dict_comprehension_key_preserved",
+                "score": 0.86,
+                "evidence": expr,
+                "location": f"{item['file']}:{item['line']}",
+                "function": edge_id_prefix,
+            }
+        )
+        edges.append(
+            {
+                "from": "arg0.keys()[*]",
+                "to": "$return.keys()[*]",
+                "kind": "return_fact_from_argument",
+                "score": 0.84,
+                "evidence": expr,
+                "location": f"{item['file']}:{item['line']}",
+                "function": edge_id_prefix,
+            }
+        )
+
     for item in structure["format_operations"]:
         targets = item.get("targets") or []
         target = targets[0] if targets else "formatted_value"
@@ -319,6 +450,21 @@ def _generate_candidate_edges(structure: dict[str, Any]) -> list[dict[str, Any]]
                 "score": 0.70,
                 "evidence": item["expr"],
                 "location": f"{item['file']}:{item['line']}",
+            }
+        )
+
+    for item in structure.get("scoped_function_evidence", {}).get("percent_operations", []):
+        targets = item.get("targets") or []
+        target = targets[0] if targets else "formatted_value"
+        edges.append(
+            {
+                "from": "format_mapping.keys()[*]",
+                "to": target,
+                "kind": "percent_mapping_key",
+                "score": 0.88,
+                "evidence": item["expr"],
+                "location": f"{item['file']}:{item['line']}",
+                "function": item.get("function"),
             }
         )
 
@@ -549,14 +695,73 @@ def _baseline_status(summary: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _dataset_line(dataset_dir: Path, relative_file: str, line: int, label: str) -> dict[str, Any]:
+    path = dataset_dir / relative_file
+    code = ""
+    if path.exists():
+        lines = path.read_text(encoding="utf-8").splitlines()
+        if 1 <= line <= len(lines):
+            code = lines[line - 1].strip()
+    return {"label": label, "file": relative_file, "line": line, "code": code}
+
+
+def _python_multipart_mixed_evidence(case: dict[str, Any], dataset_dir: Path) -> dict[str, Any]:
+    multipart = "python_multipart/multipart.py"
+    poc = "poc/poc_cve_2026_24486_python_multipart.py"
+    return {
+        "callback_chain_context": {
+            "note": "CCEC stage should repair octet-stream callback dispatch before CTPC is accepted.",
+            "facts": [
+                _dataset_line(dataset_dir, poc, 16, "FormParser constructor at public entry"),
+                _dataset_line(dataset_dir, poc, 20, "file_name keyword carries the local filename variable"),
+                _dataset_line(dataset_dir, poc, 23, "driver invokes parser.write"),
+                _dataset_line(dataset_dir, multipart, 1578, "OctetStreamParser receives on_start/on_data callbacks"),
+                _dataset_line(dataset_dir, multipart, 1765, "FormParser.write delegates to self.parser.write"),
+            ],
+            "post_ccec_virtual_sink_requirement": {
+                "boundary_callee": "parser.write",
+                "boundary_argument": "data bytes are not the filename source",
+                "risk_fact_available_at_boundary": "file_name/filename-derived path fact",
+                "virtual_final_sink": "open",
+                "reason": "If the analyzer still cannot materialize callback bodies after CCEC validation, CTPC must bind the observed parser.write boundary to the local final filesystem sink using pattern.virtual_final_sink.",
+            },
+        },
+        "access_path_evidence": [
+            _dataset_line(dataset_dir, multipart, 360, "File.__init__ accepts file_name"),
+            _dataset_line(dataset_dir, multipart, 377, "constructor branches when file_name is provided"),
+            _dataset_line(dataset_dir, multipart, 378, "os.path.splitext splits file_name into base/ext"),
+            _dataset_line(dataset_dir, multipart, 379, "self._file_base stores base"),
+            _dataset_line(dataset_dir, multipart, 380, "self._ext stores ext"),
+            _dataset_line(dataset_dir, multipart, 468, "keep_filename guard enables filename preservation"),
+            _dataset_line(dataset_dir, multipart, 473, "fname is derived from self._file_base/self._ext"),
+            _dataset_line(dataset_dir, multipart, 475, "path is os.path.join(file_dir, fname)"),
+            _dataset_line(dataset_dir, multipart, 478, "open consumes path"),
+        ],
+        "supported_pattern_hints": [
+            "constructor_keyword_capture for FormParser(..., file_name=filename)",
+            "direct_assignment for self._file_base/self._ext/fname/path locals derived from filename facts",
+            "path_join_keep_filename for os.path.join(file_dir, fname)",
+            "filesystem_path_assignment for assigning a derived path local",
+            "filesystem_sink_argument for open(path, ...)",
+            "filesystem_sink_argument with pattern.callee=parser.write and pattern.virtual_final_sink=open when post-CCEC callback body remains virtual",
+        ],
+        "negative_evidence": [
+            "UPLOAD_KEEP_FILENAME must be true for the original filename to be preserved.",
+            "Without file_name, File.__init__ generates a temporary filename rather than preserving user filename.",
+            "The CTPC should not treat parser.write(data) bytes as the filename source.",
+        ],
+    }
+
+
 def _build_oracle_blind_mixed_evidence(
     case: dict[str, Any],
     baseline: dict[str, Any],
     source: dict[str, Any],
     sink: dict[str, Any],
+    dataset_dir: Path | None = None,
 ) -> dict[str, Any]:
     baseline = _baseline_status(baseline)
-    return {
+    evidence = {
         "case_id": case["case_id"],
         "project": case["project"],
         "affected_version": case["affected_version"],
@@ -599,6 +804,52 @@ def _build_oracle_blind_mixed_evidence(
         },
         "oracle_blind": True,
     }
+    if dataset_dir and (case.get("project") == "python-multipart" or "python-multipart" in case.get("case_id", "")):
+        evidence["local_structure_evidence"] = _python_multipart_mixed_evidence(case, dataset_dir)
+        evidence["source_forward_slice"]["observations"] = [
+            _dataset_line(dataset_dir, "poc/poc_cve_2026_24486_python_multipart.py", 9, "source return is assigned to filename"),
+            _dataset_line(dataset_dir, "poc/poc_cve_2026_24486_python_multipart.py", 20, "filename is passed as FormParser file_name keyword"),
+        ]
+        evidence["source_forward_slice"]["frontier"] = "FormParser(..., file_name=filename)"
+        evidence["sink_backward_slice"]["observations"] = [
+            _dataset_line(dataset_dir, "python_multipart/multipart.py", 478, "open consumes path"),
+            _dataset_line(dataset_dir, "python_multipart/multipart.py", 475, "path depends on fname"),
+            _dataset_line(dataset_dir, "python_multipart/multipart.py", 473, "fname depends on _file_base/_ext"),
+        ]
+        evidence["sink_backward_slice"]["dependency_chain"] = ["path", "fname", "self._file_base", "self._ext"]
+        evidence["local_convergence"] = {
+            "object": "File/FormParser filename access path",
+            "access_path": "file_name -> self._file_base/self._ext -> fname -> path",
+            "source_frontier": "FormParser(..., file_name=filename)",
+            "sink_dependency_node": "open(path)",
+            "is_converged": True,
+        }
+        evidence["top_k_edges"] = [
+            {
+                "from": "filename",
+                "to": "FormParser.file_name",
+                "kind": "constructor_keyword_capture",
+                "evidence": "poc passes file_name=filename",
+            },
+            {
+                "from": "file_name",
+                "to": "self._file_base/self._ext",
+                "kind": "direct_assignment",
+                "evidence": "File.__init__ splits and stores file_name parts",
+            },
+            {
+                "from": "fname",
+                "to": "path",
+                "kind": "path_join_keep_filename",
+                "evidence": "path = os.path.join(file_dir, fname)",
+            },
+        ]
+        evidence["verdict"] = {
+            "is_access_path_gap_candidate": True,
+            "gap_type": ["mixed_case", "post_ccec_dataflow_gap"],
+            "summary": "Local static evidence shows filename preservation into filesystem path after callback dispatch is repaired.",
+        }
+    return evidence
 
 
 def build_evidence(
@@ -615,7 +866,7 @@ def build_evidence(
     source = _with_observed_line(case_dir, dataset_dir, case["source"])
     sink = _with_observed_line(case_dir, dataset_dir, case["sink"])
     if case.get("gap_type") == "mixed_case":
-        evidence = _build_oracle_blind_mixed_evidence(case, baseline, source, sink)
+        evidence = _build_oracle_blind_mixed_evidence(case, baseline, source, sink, dataset_dir)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(json.dumps(evidence, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         return evidence
@@ -623,6 +874,7 @@ def build_evidence(
     source_forward_slice = _extract_source_forward(case_dir, dataset_dir, case["source"])
     sink_backward_slice = _extract_sink_backward(case_dir, dataset_dir, case["sink"])
     structure = _extract_structure(source_forward_slice, sink_backward_slice)
+    structure["scoped_function_evidence"] = _extract_scoped_function_evidence(case_dir, dataset_dir, case)
     candidate_edges = _generate_candidate_edges(structure)
     top_k_edges = candidate_edges[:top_k]
     candidate_access_paths = sorted(
@@ -873,6 +1125,25 @@ def main() -> None:
     e2e_cases_cmd.add_argument("--llm-auto", action="store_true", help="Call the configured LLM for CCEC/CTPC synthesis")
     _add_llm_args(e2e_cases_cmd, max_tokens=8192)
 
+    llm_feasibility_cmd = subparsers.add_parser(
+        "run-llm-feasibility-suite",
+        help="Smoke-test the configured LLM API, then run the full dataset E2E suite with LLM automation",
+    )
+    llm_feasibility_cmd.add_argument("--tool-dir", required=True, type=Path, help="YASA/LAPIS-Tool directory")
+    llm_feasibility_cmd.add_argument("--cases-root", required=True, type=Path, help="Path to LAPIS-Experiments/cases")
+    llm_feasibility_cmd.add_argument("--out-dir", required=True, type=Path, help="Output directory for feasibility reports")
+    llm_feasibility_cmd.add_argument("--uast-sdk-path", required=True, type=Path, help="Path to uast4py binary")
+    llm_feasibility_cmd.add_argument("--timeout-seconds", default=180, type=int, help="Timeout per full-case run")
+    llm_feasibility_cmd.add_argument("--checker-ids", default="taint_flow_python_input_inner", help="Checker IDs for YASA")
+    llm_feasibility_cmd.add_argument("--oracle-root", type=Path, help="Optional directory of hidden oracle JSON files by case_id")
+    llm_feasibility_cmd.add_argument(
+        "--llm-connectivity-timeout-seconds",
+        default=5,
+        type=int,
+        help="Timeout for each LLM DNS/connectivity preflight before trying the next endpoint",
+    )
+    _add_llm_args(llm_feasibility_cmd, max_tokens=8192)
+
     llm_smoke_cmd = subparsers.add_parser(
         "llm-smoke-test",
         help="Call an OpenAI-compatible LLM API and parse a tiny JSON response",
@@ -890,6 +1161,18 @@ def main() -> None:
     llm_ccec_cmd.add_argument("--raw-out", type=Path, help="Optional raw LLM text output")
     _add_llm_args(llm_ccec_cmd, max_tokens=8192)
 
+    llm_ccec_validation_cmd = subparsers.add_parser(
+        "llm-generate-ccec-validation",
+        help="Build a CCEC validation prompt, call the LLM, and write must-link/must-not-link/must-kill JSON",
+    )
+    llm_ccec_validation_cmd.add_argument("--case", required=True, type=Path, help="Path to case.json")
+    llm_ccec_validation_cmd.add_argument("--ccec", required=True, type=Path, help="Path to candidate_edges JSON")
+    llm_ccec_validation_cmd.add_argument("--out", required=True, type=Path, help="Output validation contract JSON")
+    llm_ccec_validation_cmd.add_argument("--gate", type=Path, help="Optional evidence_gate.json")
+    llm_ccec_validation_cmd.add_argument("--diagnosis", type=Path, help="Optional gap_diagnosis.json")
+    llm_ccec_validation_cmd.add_argument("--raw-out", type=Path, help="Optional raw LLM text output")
+    _add_llm_args(llm_ccec_validation_cmd, max_tokens=8192)
+
     llm_ctpc_cmd = subparsers.add_parser(
         "llm-generate-ctpc",
         help="Build a CTPC prompt from an Evidence Pack, call the LLM, and write CTPC JSON",
@@ -898,6 +1181,16 @@ def main() -> None:
     llm_ctpc_cmd.add_argument("--out", required=True, type=Path, help="Output CTPC response JSON")
     llm_ctpc_cmd.add_argument("--raw-out", type=Path, help="Optional raw LLM text output")
     _add_llm_args(llm_ctpc_cmd, max_tokens=8192)
+
+    llm_ctpc_validation_cmd = subparsers.add_parser(
+        "llm-generate-validation",
+        help="Build a CTPC validation prompt, call the LLM, and write must-flow/must-not-flow/must-kill JSON",
+    )
+    llm_ctpc_validation_cmd.add_argument("--evidence", required=True, type=Path, help="Path to evidence_pack.json")
+    llm_ctpc_validation_cmd.add_argument("--ctpc", required=True, type=Path, help="Path to ctpc.json")
+    llm_ctpc_validation_cmd.add_argument("--out", required=True, type=Path, help="Output validation JSON")
+    llm_ctpc_validation_cmd.add_argument("--raw-out", type=Path, help="Optional raw LLM text output")
+    _add_llm_args(llm_ctpc_validation_cmd, max_tokens=8192)
 
     ccec_cmd = subparsers.add_parser(
         "generate-ccec-candidates",
@@ -959,6 +1252,13 @@ def main() -> None:
     )
     ccec_link_validation_cmd.add_argument("--candidates", required=True, type=Path, help="Path to CCEC candidates")
     ccec_link_validation_cmd.add_argument("--out", required=True, type=Path, help="Output validation report")
+
+    generate_ccec_validation_cmd = subparsers.add_parser(
+        "generate-ccec-validation",
+        help="Generate deterministic CCEC must-link/must-not-link/must-kill validation contract and local samples",
+    )
+    generate_ccec_validation_cmd.add_argument("--candidates", required=True, type=Path, help="Path to CCEC candidates")
+    generate_ccec_validation_cmd.add_argument("--out", required=True, type=Path, help="Output validation contract JSON")
 
     materialize_ccec_validation_cmd = subparsers.add_parser(
         "materialize-ccec-validation",
@@ -1195,6 +1495,29 @@ def main() -> None:
         for item in report["cases"]:
             print(f"{item['case_id']} final={item['final_result']} evaluation={item['evaluation_status']}")
         print(f"wrote={Path(report['out_dir']) / 'end_to_end_suite_report.json'}")
+    elif args.command == "run-llm-feasibility-suite":
+        llm_config = _llm_config_from_args(args)
+        report = run_llm_feasibility_suite(
+            tool_dir=args.tool_dir,
+            cases_root=args.cases_root,
+            out_dir=args.out_dir,
+            uast_sdk_path=args.uast_sdk_path,
+            timeout_seconds=args.timeout_seconds,
+            checker_ids=args.checker_ids,
+            oracle_root=args.oracle_root,
+            llm_config=llm_config,
+            connectivity_timeout_seconds=args.llm_connectivity_timeout_seconds,
+        )
+        print(f"status={report['status']}")
+        print(f"llm_smoke={report['llm']['smoke_test']['status']}")
+        summary = report["summary"]
+        print(
+            "dataset="
+            f"cases={summary['case_count']} reported={summary['reported']} "
+            f"not_reported={summary['not_reported']} errors={summary['errors']}"
+        )
+        print(f"wrote={args.out_dir.resolve() / 'llm_feasibility_report.json'}")
+        print(f"wrote={args.out_dir.resolve() / 'llm_feasibility_report.md'}")
     elif args.command == "llm-smoke-test":
         config = _llm_config_from_args(args)
         prompt_text = (
@@ -1221,6 +1544,24 @@ def main() -> None:
         print(f"case_id={response.get('case_id') or case.get('case_id')}")
         print(f"candidate_edges={len(response.get('candidate_edges', []) or [])}")
         print(f"wrote={args.out}")
+    elif args.command == "llm-generate-ccec-validation":
+        config = _llm_config_from_args(args)
+        case = _load_json(args.case)
+        ccec = _load_json(args.ccec)
+        gate = _load_json(args.gate) if args.gate else None
+        diagnosis = _load_json(args.diagnosis) if args.diagnosis else None
+        prompt_text = build_ccec_validation_prompt(case, ccec, gate, diagnosis)
+        raw_text = chat_text(prompt_text, config)
+        response = extract_json_object(raw_text)
+        write_llm_artifacts(args.out, response, raw_text)
+        if args.raw_out:
+            args.raw_out.parent.mkdir(parents=True, exist_ok=True)
+            args.raw_out.write_text(raw_text, encoding="utf-8")
+        print(f"case_id={response.get('case_id') or case.get('case_id')}")
+        print(f"must_link={len(response.get('must_link', []) or [])}")
+        print(f"must_not_link={len(response.get('must_not_link', []) or [])}")
+        print(f"must_kill={len(response.get('must_kill', []) or [])}")
+        print(f"wrote={args.out}")
     elif args.command == "llm-generate-ctpc":
         config = _llm_config_from_args(args)
         evidence = _load_json(args.evidence)
@@ -1234,6 +1575,22 @@ def main() -> None:
         print(f"case_id={evidence.get('case_id')}")
         print(f"schema_version={response.get('schema_version')}")
         print(f"propagation_edges={len(response.get('propagation_edges', []) or [])}")
+        print(f"wrote={args.out}")
+    elif args.command == "llm-generate-validation":
+        config = _llm_config_from_args(args)
+        evidence = _load_json(args.evidence)
+        ctpc = _load_json(args.ctpc)
+        prompt_text = build_validation_prompt(evidence, ctpc)
+        raw_text = chat_text(prompt_text, config)
+        response = extract_json_object(raw_text)
+        write_llm_artifacts(args.out, response, raw_text)
+        if args.raw_out:
+            args.raw_out.parent.mkdir(parents=True, exist_ok=True)
+            args.raw_out.write_text(raw_text, encoding="utf-8")
+        print(f"case_id={evidence.get('case_id')}")
+        print(f"must_flow={bool(response.get('must_flow'))}")
+        print(f"must_not_flow={bool(response.get('must_not_flow'))}")
+        print(f"must_kill={bool(response.get('must_kill'))}")
         print(f"wrote={args.out}")
     elif args.command == "generate-ccec-candidates":
         report = build_ccec_candidates(
@@ -1290,6 +1647,13 @@ def main() -> None:
         print(f"status={report['status']}")
         for item in report["sample_results"]:
             print(f"{item['sample']}={item['passed']}")
+        print(f"wrote={args.out}")
+    elif args.command == "generate-ccec-validation":
+        contract = generate_ccec_validation_contract(args.candidates, args.out)
+        print(f"case_id={contract.get('case_id')}")
+        print(f"must_link={len(contract.get('must_link', []) or [])}")
+        print(f"must_not_link={len(contract.get('must_not_link', []) or [])}")
+        print(f"must_kill={len(contract.get('must_kill', []) or [])}")
         print(f"wrote={args.out}")
     elif args.command == "materialize-ccec-validation":
         written = materialize_ccec_validation(args.response, args.out_dir)

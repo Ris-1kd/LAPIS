@@ -1,0 +1,39 @@
+{
+  "schema_version": "lapis.ccec_validation.v1",
+  "case_id": "cve-2024-27758-rpyc",
+  "candidates": "LAPIS/LAPIS-Experiments/reports/rpyc-llm-auto-ccec/ccec/candidate_edges.llm.json",
+  "status": "accepted",
+  "edge_results": [
+    {
+      "edge_id": "array-boundary-to-generated-method",
+      "passed": true,
+      "missing": [],
+      "confidence": 0.91,
+      "checks": {
+        "has_caller": true,
+        "has_callsite": true,
+        "has_callee": true,
+        "has_guards": true,
+        "has_guard_evidence": true,
+        "has_evidence": true,
+        "has_positive_confidence": true
+      }
+    },
+    {
+      "edge_id": "array-generated-method-to-pickle-loads",
+      "passed": true,
+      "missing": [],
+      "confidence": 0.94,
+      "checks": {
+        "has_caller": true,
+        "has_callsite": true,
+        "has_callee": true,
+        "has_guards": true,
+        "has_guard_evidence": true,
+        "has_evidence": true,
+        "has_positive_confidence": true
+      }
+    }
+  ],
+  "note": "This is the structural CCEC validation stage. Graph progress and taint reachability validation happen after applying accepted edges."
+}

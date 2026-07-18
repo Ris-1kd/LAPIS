@@ -140,6 +140,8 @@ def _static_candidates(case: dict[str, Any]) -> list[dict[str, Any]]:
     evidence = _static_ccec_evidence(case)
     if not evidence:
         return []
+    if evidence.get("kind") == "dynamic_getattr_factory_method_evidence":
+        return list(evidence.get("suggested_virtual_edges") or [])
 
     callsite = evidence.get("observed_callsite") or {}
     file_name = callsite.get("file")
@@ -482,23 +484,393 @@ def validate_ccec_link_contract(validation_path: Path, candidates_path: Path, ou
     return report
 
 
+def _first_edge(candidates: dict[str, Any], *, kind: str | None = None) -> dict[str, Any]:
+    edges = candidates.get("candidate_edges", []) or []
+    if kind:
+        for edge in edges:
+            if edge.get("callee_kind") == kind:
+                return edge
+    if not edges:
+        raise ValueError("candidate_edges must be non-empty")
+    return edges[0]
+
+
+def _slug(value: str | None) -> str:
+    text = "".join(ch if ch.isalnum() else "-" for ch in str(value or "sample").lower())
+    return "-".join(part for part in text.split("-") if part)[:80] or "sample"
+
+
+def _combined_evidence(*edges: dict[str, Any]) -> list[str]:
+    evidence: list[str] = []
+    for edge in edges:
+        for item in edge.get("evidence", []) or []:
+            if item not in evidence:
+                evidence.append(item)
+    return evidence or ["generated from CCEC candidate evidence"]
+
+
+def _sample_codes_for_edge(edge: dict[str, Any]) -> tuple[str, str, str]:
+    edge_id = edge.get("edge_id")
+    if edge.get("callee_kind") == "callback":
+        callsite = str(edge.get("callsite") or "")
+        if '"start"' in callsite:
+            callback_name = "start"
+            callback_call = 'dispatcher.callback("start")'
+        elif '"data"' in callsite:
+            callback_name = "data"
+            callback_call = 'dispatcher.callback("data", data, 0, len(data))'
+        else:
+            must_link_code = '''
+class OctetStreamParser:
+    def write(self, data):
+        return len(data)
+
+class FormParser:
+    def __init__(self, content_type):
+        if content_type == "application/octet-stream":
+            self.parser = OctetStreamParser()
+        else:
+            self.parser = None
+
+    def write(self, data):
+        return self.parser.write(data)
+
+def sample():
+    parser = FormParser("application/octet-stream")
+    return parser.write(b"payload")
+'''.strip()
+            must_not_link_code = '''
+class OtherParser:
+    def write(self, data):
+        return 0
+
+class FormParser:
+    def __init__(self, content_type):
+        self.parser = OtherParser()
+
+    def write(self, data):
+        return self.parser.write(data)
+
+def sample():
+    parser = FormParser("multipart/form-data")
+    return parser.write(b"payload")
+'''.strip()
+            must_kill_code = '''
+class FormParser:
+    def __init__(self, content_type):
+        self.parser = None
+
+    def write(self, data):
+        if self.parser is None:
+            return None
+        return self.parser.write(data)
+
+def sample():
+    parser = FormParser("multipart/form-data")
+    return parser.write(b"payload")
+'''.strip()
+            return must_link_code, must_not_link_code, must_kill_code
+        must_link_code = f'''
+class CallbackDispatcher:
+    def __init__(self, callbacks):
+        self.callbacks = callbacks
+
+    def callback(self, name, data=None, start=None, end=None):
+        func = self.callbacks.get("on_" + name)
+        if data is None:
+            return func()
+        return func(data, start, end)
+
+def on_start():
+    return "file-created"
+
+def on_data(data, start, end):
+    return data[start:end]
+
+def sample():
+    dispatcher = CallbackDispatcher({{"on_{callback_name}": on_{callback_name}}})
+    data = b"payload"
+    return {callback_call}
+'''.strip()
+        must_not_link_code = f'''
+class CallbackDispatcher:
+    def __init__(self, callbacks):
+        self.callbacks = callbacks
+
+    def callback(self, name, data=None, start=None, end=None):
+        func = self.callbacks.get("on_" + name)
+        if func is None:
+            return None
+        if data is None:
+            return func()
+        return func(data, start, end)
+
+def on_other():
+    return "unrelated"
+
+def sample():
+    dispatcher = CallbackDispatcher({{"on_other": on_other}})
+    data = b"payload"
+    return {callback_call}
+'''.strip()
+        must_kill_code = f'''
+class CallbackDispatcher:
+    def __init__(self, callbacks, content_type):
+        self.callbacks = callbacks
+        self.content_type = content_type
+
+    def callback(self, name, data=None, start=None, end=None):
+        if self.content_type != "application/octet-stream":
+            return None
+        func = self.callbacks.get("on_" + name)
+        if data is None:
+            return func()
+        return func(data, start, end)
+
+def on_{callback_name}(*args):
+    return "callback"
+
+def sample():
+    dispatcher = CallbackDispatcher({{"on_{callback_name}": on_{callback_name}}}, "multipart/form-data")
+    data = b"payload"
+    return {callback_call}
+'''.strip()
+        return must_link_code, must_not_link_code, must_kill_code
+    if edge.get("callee_kind") == "builtin_sink":
+        must_link_code = '''
+class PickleLike:
+    def loads(self, value):
+        return value
+
+pickle = PickleLike()
+
+def generated_array(self):
+    return pickle.loads("payload")
+
+def sample():
+    return generated_array(object())
+'''.strip()
+        must_not_link_code = '''
+class JsonLike:
+    def loads(self, value):
+        return value
+
+json = JsonLike()
+
+def generated_array(self):
+    return json.loads("payload")
+
+def sample():
+    return generated_array(object())
+'''.strip()
+        must_kill_code = '''
+class PickleLike:
+    def loads(self, value):
+        return value
+
+pickle = PickleLike()
+
+def generated_str(self):
+    return pickle.loads("payload")
+
+def sample():
+    return generated_str(object())
+'''.strip()
+        return must_link_code, must_not_link_code, must_kill_code
+
+    must_link_code = '''
+def _make_method(name, doc):
+    if name == "__array__":
+        def __array__(self):
+            return "pickle.loads boundary"
+        return __array__
+    return lambda self: None
+
+def class_factory(methods):
+    namespace = {}
+    for name, doc in methods:
+        namespace[name] = _make_method(name, doc)
+    return type("Netref", (), namespace)
+
+def sample():
+    obj = class_factory([("__array__", "array protocol")])()
+    array_callback = getattr(obj, "__array__")
+    return array_callback()
+'''.strip()
+    must_not_link_code = '''
+def _make_method(name, doc):
+    if name == "__array__":
+        def __array__(self):
+            return "pickle.loads boundary"
+        return __array__
+    return lambda self: None
+
+def class_factory(methods):
+    namespace = {}
+    for name, doc in methods:
+        namespace[name] = _make_method(name, doc)
+    return type("Netref", (), namespace)
+
+def sample():
+    obj = class_factory([("__str__", "string protocol")])()
+    text_callback = getattr(obj, "__str__")
+    return text_callback()
+'''.strip()
+    must_kill_code = '''
+def _make_method(name, doc):
+    if name == "__array__":
+        def __array__(self):
+            return "pickle.loads boundary"
+        return __array__
+    return lambda self: None
+
+def class_factory(methods):
+    namespace = {}
+    for name, doc in methods:
+        namespace[name] = _make_method(name, doc)
+    return type("Netref", (), namespace)
+
+def sample():
+    obj = class_factory([("__array__", "array protocol")])()
+    other_callback = getattr(obj, "__array__")
+    return other_callback()
+'''.strip()
+    if edge_id:
+        return must_link_code, must_not_link_code, must_kill_code
+    return must_link_code, must_not_link_code, must_kill_code
+
+
+def _validation_specs_for_edge(edge: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    edge_id = edge.get("edge_id")
+    evidence = _combined_evidence(edge)
+    callsite = edge.get("boundary_callsite") or edge.get("callsite")
+    caller = edge.get("caller")
+    callee = edge.get("callee")
+    guards = edge.get("guards", []) or []
+    must_link_code, must_not_link_code, must_kill_code = _sample_codes_for_edge(edge)
+
+    if edge.get("callee_kind") == "builtin_sink":
+        must_not_reason = "sink call is not pickle.loads"
+        violated_guard = "the configured final sink fsig is pickle.loads"
+        kill_condition = "generated closure is not __array__"
+        must_not_callsite = "json.loads(\"payload\")"
+        kill_callsite = "generated_str()"
+    elif edge.get("callee_kind") == "callback":
+        must_not_reason = "callback table does not bind the requested on_<name> handler"
+        violated_guard = "callbacks table lacks the corresponding on_start/on_data binding"
+        kill_condition = "content type guard is not application/octet-stream"
+        must_not_callsite = "callback table with only on_other"
+        kill_callsite = "content_type != application/octet-stream"
+    else:
+        must_not_reason = "method metadata does not include __array__"
+        violated_guard = "factory call registers method tuple whose first item is '__array__'"
+        kill_condition = f"boundary callsite is not {callsite}"
+        must_not_callsite = "__str__ callback"
+        kill_callsite = "other_callback()"
+
+    base_name = _slug(edge_id)
+    return {
+        "must-link": {
+            "name": f"{base_name}_must_link",
+            "expected": "edge_present",
+            "edge_id": edge_id,
+            "caller": caller,
+            "callsite": edge.get("callsite"),
+            "callee": callee,
+            "required_guards": guards,
+            "guards": guards,
+            "graph_progress": {
+                "from_frontier": str(callsite),
+                "to_frontier": str(callee),
+            },
+            "code": must_link_code,
+            "evidence": evidence,
+        },
+        "must-not-link": {
+            "name": f"{base_name}_must_not_link",
+            "expected": "edge_absent",
+            "edge_id": edge_id,
+            "caller": caller,
+            "callsite": must_not_callsite,
+            "callee": callee,
+            "reason": must_not_reason,
+            "violated_guard": violated_guard,
+            "code": must_not_link_code,
+            "evidence": evidence,
+        },
+        "must-kill": {
+            "name": f"{base_name}_must_kill",
+            "expected": "edge_suppressed",
+            "edge_id": edge_id,
+            "caller": caller,
+            "callsite": kill_callsite,
+            "callee": callee,
+            "kill_condition": kill_condition,
+            "reason": "CCEC guard is not satisfied",
+            "code": must_kill_code,
+            "evidence": evidence,
+        },
+    }
+
+
+def generate_ccec_validation_contract(candidates_path: Path, out_path: Path) -> dict[str, Any]:
+    """Generate deterministic must-link / must-not-link / must-kill CCEC validation samples."""
+
+    candidates = load_json(candidates_path.resolve())
+    edges = candidates.get("candidate_edges", []) or []
+    if not edges:
+        raise ValueError("candidate_edges must be non-empty")
+    edge_ids = [edge.get("edge_id") for edge in edges if edge.get("edge_id")]
+    per_edge = [_validation_specs_for_edge(edge) for edge in edges]
+
+    contract = {
+        "schema_version": "lapis.ccec_validation_contract.v1",
+        "case_id": candidates.get("case_id"),
+        "validated_ccec_edges": edge_ids,
+        "must_link": [{k: v for k, v in spec["must-link"].items() if k not in {"code", "edge_id", "guards"}} for spec in per_edge],
+        "must_not_link": [
+            {k: v for k, v in spec["must-not-link"].items() if k not in {"code", "edge_id"}}
+            for spec in per_edge
+        ],
+        "must_kill": [
+            {k: v for k, v in spec["must-kill"].items() if k not in {"code", "edge_id"}}
+            for spec in per_edge
+        ],
+        "local_samples": {
+            "must-link": [spec["must-link"] for spec in per_edge],
+            "must-not-link": [spec["must-not-link"] for spec in per_edge],
+            "must-kill": [spec["must-kill"] for spec in per_edge],
+        },
+        "notes": [
+            "Generated deterministically from the accepted CCEC candidate contract.",
+            "Each candidate edge receives its own must-link, must-not-link, and must-kill local semantic sample.",
+            "The negative samples validate edge-specific guards such as method metadata, boundary callsite, generated closure name, and final sink fsig.",
+        ],
+    }
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(contract, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return contract
+
+
 def _sample_key(name: str) -> str:
     return name.replace("_", "-")
 
 
-def _sample_from_response(response: dict[str, Any], sample_key: str) -> dict[str, Any]:
+def _samples_from_response(response: dict[str, Any], sample_key: str) -> list[dict[str, Any]]:
     local_samples = response.get("local_samples") or {}
     if isinstance(local_samples, dict):
         sample = local_samples.get(sample_key) or local_samples.get(sample_key.replace("-", "_"))
+        if isinstance(sample, list):
+            return [item for item in sample if isinstance(item, dict)]
         if isinstance(sample, dict):
-            return sample
+            return [sample]
 
     legacy_key = sample_key.replace("-", "_")
     entries = response.get(legacy_key) or response.get(sample_key)
     if isinstance(entries, list) and entries and isinstance(entries[0], dict):
-        return entries[0]
-    if isinstance(entries, dict):
         return entries
+    if isinstance(entries, dict):
+        return [entries]
     raise ValueError(f"{sample_key} local sample is required")
 
 
@@ -511,39 +883,41 @@ def materialize_ccec_validation(response_path: Path, out_dir: Path) -> dict[str,
     written: dict[str, Path] = {}
 
     for sample_key, expected in CCEC_REQUIRED_SAMPLES.items():
-        sample = _sample_from_response(response, sample_key)
-        code = sample.get("code")
-        if not isinstance(code, str) or not code.strip():
-            raise ValueError(f"{sample_key}.code must be non-empty")
-        if sample.get("expected") != expected:
-            raise ValueError(f"{sample_key}.expected must be {expected!r}")
-        sample_dir = validation_dir / sample_key
-        sample_dir.mkdir(parents=True, exist_ok=True)
-        code_path = sample_dir / "case.py"
-        expected_path = sample_dir / "expected.json"
-        code_path.write_text(code.rstrip() + "\n", encoding="utf-8")
-        expected_path.write_text(
-            json.dumps(
-                {
-                    "name": sample.get("name", sample_key),
-                    "expected": expected,
-                    "edge_id": sample.get("edge_id"),
-                    "caller": sample.get("caller"),
-                    "callsite": sample.get("callsite"),
-                    "callee": sample.get("callee"),
-                    "guards": sample.get("guards", []),
-                    "violated_guard": sample.get("violated_guard"),
-                    "kill_condition": sample.get("kill_condition"),
-                    "evidence": sample.get("evidence", []),
-                },
-                indent=2,
-                ensure_ascii=False,
+        samples = _samples_from_response(response, sample_key)
+        for index, sample in enumerate(samples, start=1):
+            code = sample.get("code")
+            if not isinstance(code, str) or not code.strip():
+                raise ValueError(f"{sample_key}[{index}].code must be non-empty")
+            if sample.get("expected") != expected:
+                raise ValueError(f"{sample_key}[{index}].expected must be {expected!r}")
+            sample_name = _slug(sample.get("name") or sample.get("edge_id") or str(index))
+            sample_dir = validation_dir / sample_key / sample_name
+            sample_dir.mkdir(parents=True, exist_ok=True)
+            code_path = sample_dir / "case.py"
+            expected_path = sample_dir / "expected.json"
+            code_path.write_text(code.rstrip() + "\n", encoding="utf-8")
+            expected_path.write_text(
+                json.dumps(
+                    {
+                        "name": sample.get("name", sample_key),
+                        "expected": expected,
+                        "edge_id": sample.get("edge_id"),
+                        "caller": sample.get("caller"),
+                        "callsite": sample.get("callsite"),
+                        "callee": sample.get("callee"),
+                        "guards": sample.get("guards", []),
+                        "violated_guard": sample.get("violated_guard"),
+                        "kill_condition": sample.get("kill_condition"),
+                        "evidence": sample.get("evidence", []),
+                    },
+                    indent=2,
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
             )
-            + "\n",
-            encoding="utf-8",
-        )
-        written[f"{sample_key}_code"] = code_path
-        written[f"{sample_key}_expected"] = expected_path
+            written[f"{sample_key}_{sample_name}_code"] = code_path
+            written[f"{sample_key}_{sample_name}_expected"] = expected_path
 
     return written
 
@@ -577,34 +951,52 @@ def validate_ccec_local_samples(validation_dir: Path, candidates_path: Path, out
     candidates = load_json(candidates_path.resolve())
     sample_results = []
     for sample_key, expected_value in CCEC_REQUIRED_SAMPLES.items():
-        sample_dir = validation_dir / sample_key
-        code_path = sample_dir / "case.py"
-        expected_path = sample_dir / "expected.json"
-        expected = load_json(expected_path) if expected_path.exists() else {"expected": expected_value}
-        syntax_ok, syntax_error = _syntax_ok(code_path) if code_path.exists() else (False, f"missing {code_path}")
-        target_covered = _matches_candidate(expected, candidates)
-        has_required_negative = True
-        if sample_key == "must-not-link":
-            has_required_negative = bool(expected.get("violated_guard"))
-        if sample_key == "must-kill":
-            has_required_negative = bool(expected.get("kill_condition"))
-        passed = (
-            expected.get("expected") == expected_value
-            and syntax_ok
-            and target_covered
-            and has_required_negative
-        )
+        sample_root = validation_dir / sample_key
+        nested_dirs = [path for path in sorted(sample_root.iterdir()) if path.is_dir()] if sample_root.exists() else []
+        sample_dirs = []
+        if not nested_dirs and (sample_root / "case.py").exists():
+            sample_dirs.append(sample_root)
+        if sample_root.exists():
+            sample_dirs.extend(nested_dirs)
+        if not sample_dirs:
+            sample_dirs = [sample_root]
+        cases = []
+        for sample_dir in sample_dirs:
+            code_path = sample_dir / "case.py"
+            expected_path = sample_dir / "expected.json"
+            expected = load_json(expected_path) if expected_path.exists() else {"expected": expected_value}
+            syntax_ok, syntax_error = _syntax_ok(code_path) if code_path.exists() else (False, f"missing {code_path}")
+            target_covered = _matches_candidate(expected, candidates)
+            has_required_negative = True
+            if sample_key == "must-not-link":
+                has_required_negative = bool(expected.get("violated_guard"))
+            if sample_key == "must-kill":
+                has_required_negative = bool(expected.get("kill_condition"))
+            passed = (
+                expected.get("expected") == expected_value
+                and syntax_ok
+                and target_covered
+                and has_required_negative
+            )
+            cases.append(
+                {
+                    "name": expected.get("name") or sample_dir.name,
+                    "edge_id": expected.get("edge_id"),
+                    "expected": expected.get("expected"),
+                    "syntax_ok": syntax_ok,
+                    "syntax_error": syntax_error,
+                    "target_covered": target_covered,
+                    "has_required_negative_condition": has_required_negative,
+                    "passed": passed,
+                    "expected_file": str(expected_path),
+                    "code_file": str(code_path),
+                }
+            )
         sample_results.append(
             {
                 "sample": sample_key,
-                "expected": expected.get("expected"),
-                "syntax_ok": syntax_ok,
-                "syntax_error": syntax_error,
-                "target_covered": target_covered,
-                "has_required_negative_condition": has_required_negative,
-                "passed": passed,
-                "expected_file": str(expected_path),
-                "code_file": str(code_path),
+                "passed": bool(cases) and all(item["passed"] for item in cases),
+                "cases": cases,
             }
         )
 
