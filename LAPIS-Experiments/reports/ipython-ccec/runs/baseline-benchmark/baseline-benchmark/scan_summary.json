@@ -1,0 +1,75 @@
+{
+  "projectName": "cve-2023-24816-ipython",
+  "projectPath": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/benchmarks/connectivity_gap/cve-2023-24816-ipython/",
+  "yasaVersion": "0.3.1",
+  "parallelWorkers": 1,
+  "cgAlgorithm": "DEFAULT",
+  "dumpAllCG": false,
+  "dumpAST": false,
+  "scanStartTime": "2026-07-28T03:39:51.253Z",
+  "scanEndTime": "2026-07-28T03:40:42.799Z",
+  "findingCount": 0,
+  "language": "python",
+  "fileCount": 295,
+  "lineCount": 73363,
+  "totalTimeMs": 51546,
+  "markedSourceCount": 1,
+  "matchedSinkCount": 2,
+  "entryPointCount": 1,
+  "parseMs": 50962,
+  "parseCodeMs": 43145,
+  "preloadMs": 97,
+  "processModuleMs": 7677,
+  "startAnalyzeMs": 183,
+  "symbolInterpretMs": 14,
+  "execCount": 63699,
+  "execInstCount": 26940,
+  "avgExecTimePerInst": 0,
+  "avgInstExecCount": 2.3644766146993317,
+  "execTimeP70Ms": 0,
+  "execTimeP99Ms": 0,
+  "execTimeP100Ms": 0,
+  "execTimesP70": 2,
+  "execTimesP99": 12,
+  "execTimesP100": 163,
+  "ruleConfig": [
+    {
+      "checkerIds": [
+        "taint_flow_python_input_inner"
+      ],
+      "sources": {
+        "FuncCallReturnValueTaintSource": [
+          {
+            "fsig": "cve_2023_24816_source",
+            "values": [
+              "0"
+            ],
+            "scopeFile": "poc/poc_cve_2023_24816_ipython.py",
+            "scopeFunc": "cve_2023_24816_driver"
+          }
+        ]
+      },
+      "sinks": {
+        "FuncCallTaintSink": [
+          {
+            "args": [
+              "0"
+            ],
+            "attribute": "CVE-2023-24816-ipython-command",
+            "fsig": "os.system"
+          }
+        ]
+      },
+      "entrypoints": [
+        {
+          "filePath": "/poc/poc_cve_2023_24816_ipython.py",
+          "functionName": "cve_2023_24816_driver",
+          "attribute": "poc-cve-2023-24816-final-sink-only"
+        }
+      ],
+      "outputAtTaint": {
+        "traceStrategy": "full"
+      }
+    }
+  ]
+}

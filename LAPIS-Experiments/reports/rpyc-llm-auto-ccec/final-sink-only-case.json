@@ -7,8 +7,8 @@
   "repair_branch": "ccec",
   "difficulty": "hard",
   "category": "缺失调用边",
-  "dataset_dir": "/home/ubuntu/llm-yasa-repair/py-bench/cve-2024-27758-rpyc",
-  "baseline_summary": "/home/ubuntu/llm-yasa-repair/py-result/runs/yasa-precise/cve-2024-27758-rpyc/scan_summary.json",
+  "dataset_dir": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/benchmarks/connectivity_gap/cve-2024-27758-rpyc",
+  "baseline_summary": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/rpyc-llm-auto-ccec/runs/baseline-materialized/baseline-materialized/scan_summary.json",
   "rule_file": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/connectivity_gap/cve-2024-27758-rpyc/rules/final-sink-only.json",
   "source": {
     "file": "poc/poc_cve_2024_27758_rpyc.py",
@@ -17,7 +17,7 @@
     "expr": "payload = cve_2024_27758_source()"
   },
   "sink": {
-    "file": "rpyc/core/netref.py",
+    "file": "source/rpyc/core/netref.py",
     "line": 255,
     "callee": "pickle.loads",
     "argument": "syncreq(...)",

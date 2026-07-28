@@ -1,0 +1,22 @@
+{
+  "schema_version": "lapis.ctpc_repair_plan.v1",
+  "case_id": "cve-2026-24486-python-multipart",
+  "gap_type": "propagation_gap",
+  "repair_branch": null,
+  "mode": "deferred",
+  "llm_required": false,
+  "top_k": 0,
+  "candidate_count": 0,
+  "top_k_propagation_candidates": [],
+  "generation_strategy": "defer",
+  "next_steps": [
+    "defer"
+  ],
+  "contract_mapping": {
+    "dict_literal_key": "propagation_edges",
+    "dict_comprehension_key_preserved": "propagation_edges or function_summaries",
+    "named_percent_format_mapping_key": "propagation_edges and risk_upgrades",
+    "safe_patterns": "kill_conditions"
+  },
+  "note": "CTPC top-k is a ranked candidate propagation-obligation set used while generating the contract. It is not the final CTPC; the LLM maps selected candidates into propagation_edges, function_summaries, risk_upgrades, and kill_conditions."
+}

@@ -27,6 +27,7 @@ import type {
 } from '../../../../types/uast'
 
 const Uuid = require('node-uuid')
+const fs = require('fs')
 const globby = require('fast-glob')
 const _ = require('lodash')
 const path = require('path')
@@ -62,6 +63,156 @@ const {
   findProjectRoot,
   buildSearchPaths,
 } = require('./python-import-resolver')
+
+let cachedCcecPath = ''
+let cachedCcecEdges: any[] = []
+
+function loadMaterializedCcecEdges(): any[] {
+  const ccecPath = Config.lapisCcecFile
+  if (!ccecPath || !fs.existsSync(ccecPath)) return []
+  if (cachedCcecPath === ccecPath) return cachedCcecEdges
+  cachedCcecPath = ccecPath
+  try {
+    const ccec = JSON.parse(fs.readFileSync(ccecPath, 'utf8'))
+    cachedCcecEdges = (Array.isArray(ccec?.candidate_edges) ? ccec.candidate_edges : []).filter((edge: any) => {
+      const target = edge?.target
+      if (!target?.file || !target?.line || !target?.function) return false
+      if (edge?.virtual_sink === true || edge?.virtual_boundary_sink === true) return false
+      return edge?.callee_kind === 'rebound_function' || edge?.callee_kind === 'real_function'
+    })
+  } catch (error) {
+    cachedCcecEdges = []
+  }
+  return cachedCcecEdges
+}
+
+function textMatches(text: string, needle: string): boolean {
+  if (!text || !needle) return false
+  const compactText = compactCallsiteText(text)
+  const compactNeedle = compactCallsiteText(needle)
+  if (compactText === compactNeedle || compactText.includes(compactNeedle) || compactNeedle.includes(compactText)) {
+    return true
+  }
+  return text === needle || text.includes(needle) || needle.includes(text)
+}
+
+function compactCallsiteText(value: string): string {
+  let text = String(value || '').trim()
+  const locationPrefixed = text.match(/^(?:[\w./\\-]+\.py|\S+):\d+(?::\d+)?\s+(.+)$/)
+  if (locationPrefixed) text = locationPrefixed[1].trim()
+  if (text.startsWith('return ')) text = text.slice('return '.length).trim()
+  return text
+}
+
+function sourceMatches(actual: string | undefined, expected: string): boolean {
+  if (!actual || !expected) return false
+  const normalizedActual = path.normalize(actual)
+  const normalizedExpected = path.normalize(expected)
+  return normalizedActual === normalizedExpected || normalizedActual.endsWith(normalizedExpected)
+}
+
+function fclosFunctionName(fclos: any): string | undefined {
+  return fclos?.ast?.fdef?.id?.name || fclos?.ast?.fdef?.name || fclos?.ast?.node?.id?.name || fclos?.ast?.node?.name
+}
+
+function fclosFunctionDef(fclos: any): any {
+  return fclos?.ast?.fdef || fclos?.ast?.node || fclos?.fdef
+}
+
+function collectMaterializedFclos(analyzer: any): any[] {
+  const found: any[] = []
+  const seen = new Set<any>()
+  const worklist: any[] = [
+    analyzer?.topScope,
+    analyzer?.entry_fclos,
+    analyzer?.thisFClos,
+    ...(Array.isArray(analyzer?.symbolTable) ? analyzer.symbolTable : []),
+    ...((analyzer?.symbolTable instanceof Map) ? Array.from(analyzer.symbolTable.values()) : []),
+    ...Object.values(analyzer?.topScope?.context?.funcs || {}),
+  ]
+
+  while (worklist.length > 0 && seen.size < 50000) {
+    const item = worklist.shift()
+    if (!item || typeof item !== 'object' || seen.has(item)) continue
+    seen.add(item)
+    if (item.vtype === 'fclos') found.push(item)
+
+    const contextFuncs = item.context?.funcs
+    if (contextFuncs && typeof contextFuncs === 'object') worklist.push(...Object.values(contextFuncs))
+    const rawValue = item.value
+    if (rawValue instanceof Map) {
+      worklist.push(...Array.from(rawValue.values()))
+    } else if (rawValue && typeof rawValue === 'object') {
+      worklist.push(...Object.values(rawValue))
+    }
+    if (item.members instanceof Map) worklist.push(...Array.from(item.members.values()))
+    worklist.push(item.parent, item._this, item.object, item.ast)
+  }
+  return found
+}
+
+function appendMaterializedCcecDiagnostic(edge: any, node: any, matchedFclos: any | null, reason: string): void {
+  if (!Config.reportDir) return
+  try {
+    fs.mkdirSync(Config.reportDir, { recursive: true })
+    fs.appendFileSync(
+      path.join(Config.reportDir, 'lapis-ccec-materialized-diagnostics.jsonl'),
+      JSON.stringify({
+        file: node?.loc?.sourcefile,
+        line: node?.loc?.start?.line,
+        callsite: (() => {
+          try {
+            return AstUtil.prettyPrint(node)
+          } catch (error) {
+            return ''
+          }
+        })(),
+        matched: !!matchedFclos,
+        reason,
+        edge: edge || null,
+        target: edge?.target || null,
+        matchedFunction: matchedFclos
+          ? {
+              file: fclosFunctionDef(matchedFclos)?.loc?.sourcefile,
+              line: fclosFunctionDef(matchedFclos)?.loc?.start?.line,
+              function: fclosFunctionName(matchedFclos),
+            }
+          : null,
+      }) + '\n',
+      'utf8'
+    )
+  } catch (error) {
+    // Diagnostics must never affect analysis.
+  }
+}
+
+function findMaterializedCcecFclos(analyzer: any, node: any): any | null {
+  const edges = loadMaterializedCcecEdges()
+  if (edges.length === 0) return null
+  let callText = ''
+  try {
+    callText = AstUtil.prettyPrint(node)
+  } catch (error) {
+    callText = ''
+  }
+  const edge = edges.find((candidate: any) => {
+    const boundary = candidate.boundary_callsite || candidate.boundary || candidate.frontier_callsite || candidate.callsite
+    return typeof boundary === 'string' && textMatches(callText, boundary)
+  })
+  if (!edge?.target) return null
+
+  for (const candidate of collectMaterializedFclos(analyzer)) {
+    const fdef = fclosFunctionDef(candidate)
+    if (!fdef?.loc?.sourcefile || !fdef?.loc?.start?.line) continue
+    if (!sourceMatches(fdef.loc.sourcefile, String(edge.target.file))) continue
+    if (Number(fdef.loc.start.line) !== Number(edge.target.line)) continue
+    if (fclosFunctionName(candidate) !== edge.target.function) continue
+    appendMaterializedCcecDiagnostic(edge, node, candidate, 'materialized ccec call edge matched target fclos')
+    return candidate
+  }
+  appendMaterializedCcecDiagnostic(edge, node, null, 'materialized ccec boundary matched but target fclos was not found')
+  return null
+}
 
 /**
  *
@@ -333,7 +484,7 @@ class PythonAnalyzer extends Analyzer {
         einfo: state.einfo,
       })
 
-    const fclos = this.processInstruction(scope, node.callee, state)
+    let fclos = this.processInstruction(scope, node.callee, state)
     if (!fclos) return new UndefinedValue()
 
     const argvalues: any[] = []
@@ -345,6 +496,11 @@ class PythonAnalyzer extends Analyzer {
       if (logger.isTraceEnabled()) logger.trace(`arg: ${this.formatScope(argv)}`)
       if (Array.isArray(argv)) argvalues.push(...argv)
       else argvalues.push(argv)
+    }
+
+    const materializedCcecFclos = findMaterializedCcecFclos(this, node)
+    if (materializedCcecFclos) {
+      fclos = materializedCcecFclos
     }
 
     // 构建结构化 callInfo，携带 keyword/spread/kwspread 信息

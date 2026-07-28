@@ -1,0 +1,181 @@
+{
+  "schema_version": "lapis.ccec_candidates.v1",
+  "case_id": "cve-2026-24486-python-multipart",
+  "gap_type": "connectivity_gap",
+  "repair_branch": "ccec_then_ctpc",
+  "ccec_mode": "hard",
+  "generation_mechanism": "llm_synthesized_virtual_or_materialized_edge",
+  "llm_role": "Adopt suggested virtual callback edges from static callback registration evidence; format guards and contracts without inventing new candidates.",
+  "candidate_edges": [
+    {
+      "edge_id": "ccec_formparser_write_to_octetstream_write",
+      "caller": "python_multipart.multipart.FormParser.write",
+      "callsite": "self.parser.write(data)",
+      "boundary_callsite": "parser.write(b\"file-content\")",
+      "callee": "python_multipart.multipart.OctetStreamParser.write",
+      "callee_kind": "callback",
+      "target": {
+        "file": "python_multipart/multipart.py",
+        "line": 690,
+        "function": "python_multipart.multipart.OctetStreamParser.write",
+        "args": ["data"]
+      },
+      "confidence": 0.88,
+      "guards": [
+        "FormParser constructed an OctetStreamParser for application/octet-stream"
+      ],
+      "guard_evidence": [
+        {
+          "condition": "content_type == 'application/octet-stream' and callbacks map contains on_start/on_data",
+          "derived_from": "callback_registration",
+          "evidence": {
+            "file": "python_multipart/multipart.py",
+            "line": 1578,
+            "code": "parser = OctetStreamParser("
+          }
+        }
+      ],
+      "evidence": [
+        "python_multipart/multipart.py:1765 FormParser.write delegates to self.parser.write(data)",
+        "python_multipart/multipart.py:1578 octet-stream branch stores OctetStreamParser in self.parser"
+      ],
+      "contract": {
+        "preconditions": [
+          "FormParser constructed an OctetStreamParser for application/octet-stream"
+        ],
+        "effects": [
+          {
+            "kind": "add_call_edge",
+            "from": "python_multipart.multipart.FormParser.write",
+            "to": "python_multipart.multipart.OctetStreamParser.write",
+            "at": "self.parser.write(data)"
+          }
+        ],
+        "must_not_apply_when": [
+          "content type is not application/octet-stream",
+          "callback table does not bind the corresponding on_<name> handler"
+        ]
+      }
+    },
+    {
+      "edge_id": "ccec_octetstream_write_start_callback",
+      "caller": "python_multipart.multipart.OctetStreamParser.write",
+      "callsite": "self.callback(\"start\")",
+      "boundary_callsite": "self.callback(\"start\")",
+      "callee": "python_multipart.multipart.FormParser.__init__.<callback:on_start>",
+      "callee_kind": "callback",
+      "target": {
+        "file": "python_multipart/multipart.py",
+        "line": 1556,
+        "function": "python_multipart.multipart.FormParser.__init__.<callback:on_start>",
+        "args": []
+      },
+      "confidence": 0.86,
+      "guards": [
+        "callbacks table registers on_start to the nested on_start function"
+      ],
+      "guard_evidence": [
+        {
+          "condition": "content_type == 'application/octet-stream' and callbacks map contains on_start/on_data",
+          "derived_from": "callback_registration",
+          "evidence": {
+            "file": "python_multipart/multipart.py",
+            "line": 1578,
+            "code": "parser = OctetStreamParser("
+          }
+        }
+      ],
+      "evidence": [
+        "python_multipart/multipart.py:690 OctetStreamParser.write dispatches start",
+        "python_multipart/multipart.py:1578 callbacks maps on_start to on_start"
+      ],
+      "contract": {
+        "preconditions": [
+          "callbacks table registers on_start to the nested on_start function"
+        ],
+        "effects": [
+          {
+            "kind": "add_call_edge",
+            "from": "python_multipart.multipart.OctetStreamParser.write",
+            "to": "python_multipart.multipart.FormParser.__init__.<callback:on_start>",
+            "at": "self.callback(\"start\")"
+          }
+        ],
+        "must_not_apply_when": [
+          "content type is not application/octet-stream",
+          "callback table does not bind the corresponding on_<name> handler"
+        ]
+      }
+    },
+    {
+      "edge_id": "ccec_octetstream_write_data_callback",
+      "caller": "python_multipart.multipart.OctetStreamParser.write",
+      "callsite": "self.callback(\"data\", data, 0, data_len)",
+      "boundary_callsite": "self.callback(\"data\", data, 0, data_len)",
+      "callee": "python_multipart.multipart.FormParser.__init__.<callback:on_data>",
+      "callee_kind": "callback",
+      "target": {
+        "file": "python_multipart/multipart.py",
+        "line": 1560,
+        "function": "python_multipart.multipart.FormParser.__init__.<callback:on_data>",
+        "args": ["data", "start", "end"]
+      },
+      "confidence": 0.86,
+      "guards": [
+        "callbacks table registers on_data to the nested on_data function"
+      ],
+      "guard_evidence": [
+        {
+          "condition": "content_type == 'application/octet-stream' and callbacks map contains on_start/on_data",
+          "derived_from": "callback_registration",
+          "evidence": {
+            "file": "python_multipart/multipart.py",
+            "line": 1578,
+            "code": "parser = OctetStreamParser("
+          }
+        }
+      ],
+      "evidence": [
+        "python_multipart/multipart.py:710 OctetStreamParser.write dispatches data",
+        "python_multipart/multipart.py:1578 callbacks maps on_data to on_data"
+      ],
+      "contract": {
+        "preconditions": [
+          "callbacks table registers on_data to the nested on_data function"
+        ],
+        "effects": [
+          {
+            "kind": "add_call_edge",
+            "from": "python_multipart.multipart.OctetStreamParser.write",
+            "to": "python_multipart.multipart.FormParser.__init__.<callback:on_data>",
+            "at": "self.callback(\"data\", data, 0, data_len)"
+          }
+        ],
+        "must_not_apply_when": [
+          "content type is not application/octet-stream",
+          "callback table does not bind the corresponding on_<name> handler"
+        ]
+      }
+    }
+  ],
+  "ranking": {
+    "top_k": 3,
+    "ranking_reason": [
+      "All candidates are provided as suggested_virtual_edges derived from static callback registration.",
+      "Callsite strings align with registered callback keys (start, data).",
+      "Edges connect the observed boundary FormParser.write to OctetStreamParser.write and its callbacks."
+    ]
+  },
+  "validation_expectations": {
+    "structural": "callee exists or can be materialized from evidence",
+    "graph_progress": "source frontier advances beyond the symbolic/dangling callsite",
+    "taint_progress": "source becomes closer to sink; possible propagation gaps require post-CCEC rediagnosis"
+  },
+  "dataflow_still_required": true,
+  "notes": [
+    "Candidate edges are exactly the suggested_virtual_edges from static callback registration and delegation evidence; no additional edges invented.",
+    "Guards derive from the application/octet-stream branch where FormParser stores an OctetStreamParser with on_start/on_data callbacks (python_multipart/multipart.py:1578).",
+    "Boundary callsite for the first edge maps the public PoC invocation parser.write(b\"file-content\").",
+    "Although gap_diagnosis indicates a propagation gap, this step repairs callgraph connectivity only; CTPC will be run subsequently."
+  ]
+}

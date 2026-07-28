@@ -1,0 +1,139 @@
+{
+  "runner": "yasa",
+  "scope": "full-cve",
+  "label": "baseline",
+  "case_id": "cve-2023-4033-mlflow",
+  "tool_dir": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Tool",
+  "case_path": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/control/cve-2023-4033-mlflow/case.json",
+  "source_path": "/home/ubuntu/llm-yasa-repair/py-bench/cve-2023-4033-mlflow",
+  "rule_file": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/control/cve-2023-4033-mlflow/rules/final-sink-only.json",
+  "uast_sdk_path": "/home/ubuntu/llm-yasa-repair/YASA-Engine-upstream/uast4py-linux-amd64",
+  "ctpc_file": null,
+  "ccec_file": null,
+  "checker_ids": "taint_flow_python_input_inner",
+  "dump_cg": false,
+  "status": "not_reported",
+  "result": "no_finding",
+  "returncode": 0,
+  "report_dir": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/mlflow-control-latest/runs/baseline/baseline",
+  "summary": {
+    "projectName": "cve-2023-4033-mlflow",
+    "projectPath": "/home/ubuntu/llm-yasa-repair/py-bench/cve-2023-4033-mlflow/",
+    "yasaVersion": "0.3.1",
+    "parallelWorkers": 1,
+    "cgAlgorithm": "DEFAULT",
+    "dumpAllCG": false,
+    "dumpAST": false,
+    "scanStartTime": "2026-07-28T07:17:01.962Z",
+    "scanEndTime": "2026-07-28T07:18:32.491Z",
+    "findingCount": 0,
+    "language": "python",
+    "fileCount": 413,
+    "lineCount": 103168,
+    "totalTimeMs": 90529,
+    "markedSourceCount": 0,
+    "matchedSinkCount": 0,
+    "entryPointCount": 0,
+    "parseMs": 89257,
+    "parseCodeMs": 88512,
+    "preloadMs": 0,
+    "processModuleMs": 1,
+    "startAnalyzeMs": 8,
+    "symbolInterpretMs": 0,
+    "execCount": 0,
+    "execInstCount": 0,
+    "avgExecTimePerInst": 0,
+    "avgInstExecCount": 0,
+    "execTimeP70Ms": 0,
+    "execTimeP99Ms": 0,
+    "execTimeP100Ms": 0,
+    "execTimesP70": 0,
+    "execTimesP99": 0,
+    "execTimesP100": 0,
+    "ruleConfig": [
+      {
+        "checkerIds": [
+          "taint_flow_python_input_inner"
+        ],
+        "sources": {
+          "TaintSource": [
+            {
+              "path": "input_path",
+              "scopeFile": "mlflow/models/cli.py",
+              "scopeFunc": "predict",
+              "locStart": 131,
+              "locEnd": 157
+            }
+          ]
+        },
+        "sinks": {
+          "FuncCallTaintSink": [
+            {
+              "args": [
+                "0"
+              ],
+              "attribute": "PythonCommandInjection",
+              "fsig": "subprocess.Popen"
+            }
+          ]
+        },
+        "entrypoints": [
+          {
+            "filePath": "/mlflow/models/cli.py",
+            "functionName": "predict",
+            "attribute": "cve-2023-4033-mlflow-models-predict-final-sink-only"
+          }
+        ],
+        "outputAtTaint": {
+          "traceStrategy": "full"
+        }
+      }
+    ]
+  },
+  "trace_quality": {
+    "findingCount": 0,
+    "ccecVirtualSink": false,
+    "ctpcVirtualSink": false,
+    "factTraceGap": false,
+    "ctpcFactTrace": false,
+    "actualSourceToBoundaryTrace": false,
+    "traceStatus": "no_finding_trace",
+    "needsCtpc": false,
+    "needsTraceReview": false,
+    "decisionBasis": "Derived from SARIF sinkAttribute and trace labels. A CCEC finding with FACT TRACE GAP means callgraph repair reached the virtual sink but source-to-boundary taint propagation is still open."
+  },
+  "run": {
+    "command": [
+      "timeout",
+      "180s",
+      "npx",
+      "tsx",
+      "src/main.ts",
+      "--sourcePath",
+      "/home/ubuntu/llm-yasa-repair/py-bench/cve-2023-4033-mlflow",
+      "--language",
+      "python",
+      "--report",
+      "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/mlflow-control-latest/runs/baseline/baseline",
+      "--ruleConfigFile",
+      "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/control/cve-2023-4033-mlflow/rules/final-sink-only.json",
+      "--checkerIds",
+      "taint_flow_python_input_inner",
+      "--entrypointMode",
+      "ONLY_CUSTOM",
+      "--workerCount",
+      "1",
+      "--incremental",
+      "false",
+      "--taintTraceOutputStrategy",
+      "full",
+      "--uastSDKPath",
+      "/home/ubuntu/llm-yasa-repair/YASA-Engine-upstream/uast4py-linux-amd64"
+    ],
+    "cwd": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Tool",
+    "returncode": 0,
+    "stdout_tail": "[YASA] Begin execution\n[YASA][init] Using rule config file: /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/control/cve-2023-4033-mlflow/rules/final-sink-only.json\n[YASA][init] Specified checker IDs: [taint_flow_python_input_inner]\n[YASA][init] EntrypointMode set: ONLY_CUSTOM\nversion: 0.3.1\nv8 heap_size_limit: 2096 MB\nmain file:/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Tool/src/main.ts\n[YASA][init] Source path: /home/ubuntu/llm-yasa-repair/py-bench/cve-2023-4033-mlflow/\n[YASA][init] Report directory: /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/mlflow-control-latest/runs/baseline/baseline\n[YASA][init] Analysis language: python\n[YASA][init] Analysis analyzer: PythonAnalyzer\n[YASA][init] Loading checker: taint_flow_python_input_inner from /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Tool/src/checker/taint/python/python-taint-checker.ts\n[YASA][init] Successfully loaded 1 checker(s): [taint_flow_python_input_inner]\n[YASA] Executing preProcess\n[YASA][preProcess] Executing parseCode\n[YASA][preProcess] Completed parseCode, cost: 88512ms, heap: 41.76/62.49 MB, rss: 140.58 MB, arrayBuffers: 0.07 MB\n[YASA][preProcess] Executing preload\n[YASA][preProcess] Completed preload, cost: 0ms, heap: 41.81/62.49 MB, rss: 140.58 MB, arrayBuffers: 0.07 MB\n[YASA][preProcess] Executing processModule\n[YASA][preProcess] Completed processModule, cost: 1ms, heap: 41.94/62.49 MB, rss: 140.58 MB, arrayBuffers: 0.07 MB\n[YASA] Completed preProcess, cost: 89257ms, heap: 41.95/62.49 MB, rss: 140.58 MB, arrayBuffers: 0.07 MB\n[YASA] Executing startAnalyze\nmatch entryPoint fail\n[YASA] Completed startAnalyze, cost: 8ms, heap: 42.01/62.49 MB, rss: 140.58 MB, arrayBuffers: 0.07 MB\n[YASA] Executing symbolInterpret\n[symbolInterpret]：EntryPoints are not found\n[YASA] Completed symbolInterpret, cost: 0ms, heap: 42.04/62.49 MB, rss: 140.58 MB, arrayBuffers: 0.07 MB\nFound 4 potential output strategy files\nRegistered strategy: callchain from callchain-output-strategy.ts\nRegistered strategy: callgraph from callgraph-output-strategy.ts\nRegistered strategy: interactive from interactive-output-strategy.ts\nRegistered strategy: taintflow from taint-output-strategy.ts\nSuccessfully registered 4 output strategies\n\n=======================  outputFindings  =======================\n================================================================\n\nanalyze done\n[YASA] Execution completed, cost: 90529ms, heap: 43.11/62.49 MB, rss: 140.79 MB, arrayBuffers: 0.1 MB\n\n======================  Analysis Overview  =====================\nLanguage                           : python\nFiles analyzed                     : 413\nLines of code                      : 103,168\nTotal time                         : 1m30s496ms\nExecuted instruction               : 0\nExecution count                    : 0\nSources marked                     : 0\nSinks matched                      : 0\nValid entrypoints                  : 0\nFindings                           : 0\nAvg execution time per instruction : 0.00ms\nAvg instruction execution count    : 0.00\nExecution time 70%/99%/100%        : 0.00ms/0.00ms/0.00ms\nExecution times 70%/99%/100%       : 0.00/0.00/0.00\n================================================================\n\n\n===================  Performance Statistics  ===================\ntotal cost: 1m30s529ms\npreProcess cost: 1m29s257ms (98.6%)\n  parseCode cost: 1m28s512ms (99.2%)\n  processModule cost: 0s1ms (0.0%)\n  other cost: 0s744ms (0.8%)\nstartAnalyze cost: 0s8ms (0.0%)\nsymbolInterpret cost: 0s0ms (0.0%)\nother cost: 1s264ms (1.4%)\n================================================================\n\n",
+    "stderr_tail": ""
+  },
+  "interpretation": "This is a full original-CVE run. A finding here is evidence that the enhanced analyzer connected the case entrypoint, interprocedural execution context, CTPC access-path facts, and final sink rule on the original dataset."
+}

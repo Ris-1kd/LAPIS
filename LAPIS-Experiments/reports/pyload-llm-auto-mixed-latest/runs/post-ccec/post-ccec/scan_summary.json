@@ -1,0 +1,74 @@
+{
+  "projectName": "cve-2025-55156-pyload",
+  "projectPath": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/benchmarks/mixed_case/cve-2025-55156-pyload/",
+  "yasaVersion": "0.3.1",
+  "parallelWorkers": 1,
+  "cgAlgorithm": "DEFAULT",
+  "dumpAllCG": false,
+  "dumpAST": false,
+  "scanStartTime": "2026-07-28T07:40:33.644Z",
+  "scanEndTime": "2026-07-28T07:42:43.347Z",
+  "findingCount": 0,
+  "language": "python",
+  "fileCount": 570,
+  "lineCount": 61479,
+  "totalTimeMs": 129703,
+  "markedSourceCount": 2,
+  "matchedSinkCount": 2,
+  "entryPointCount": 1,
+  "parseMs": 97791,
+  "parseCodeMs": 61980,
+  "preloadMs": 121,
+  "processModuleMs": 35550,
+  "startAnalyzeMs": 727,
+  "symbolInterpretMs": 29965,
+  "execCount": 143735,
+  "execInstCount": 47466,
+  "avgExecTimePerInst": 0,
+  "avgInstExecCount": 3.0281675304428433,
+  "execTimeP70Ms": 0,
+  "execTimeP99Ms": 0,
+  "execTimeP100Ms": 0,
+  "execTimesP70": 2,
+  "execTimesP99": 32,
+  "execTimesP100": 656,
+  "ruleConfig": [
+    {
+      "checkerIds": [
+        "taint_flow_python_input_inner"
+      ],
+      "sources": {
+        "TaintSource": [
+          {
+            "path": "url",
+            "scopeFile": "poc/poc_cve_2025_55156_pyload.py",
+            "scopeFunc": "cve_2025_55156_driver",
+            "locStart": 15,
+            "locEnd": 18
+          }
+        ]
+      },
+      "sinks": {
+        "FuncCallTaintSink": [
+          {
+            "args": [
+              "0"
+            ],
+            "attribute": "CVE-2025-55156-pyload-sql-injection",
+            "fsig": "self.c.execute"
+          }
+        ]
+      },
+      "entrypoints": [
+        {
+          "filePath": "/poc/poc_cve_2025_55156_pyload.py",
+          "functionName": "cve_2025_55156_driver",
+          "attribute": "poc-cve-2025-55156-final-sink-only"
+        }
+      ],
+      "outputAtTaint": {
+        "traceStrategy": "full"
+      }
+    }
+  ]
+}

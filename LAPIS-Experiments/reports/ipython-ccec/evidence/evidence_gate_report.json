@@ -1,0 +1,350 @@
+{
+  "schema_version": "lapis.evidence_gate.v1",
+  "case_id": "cve-2023-24816-ipython",
+  "case": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/connectivity_gap/cve-2023-24816-ipython/case.json",
+  "baseline_summary": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/ipython-ccec/runs/baseline-benchmark/baseline-benchmark/scan_summary.json",
+  "declared_case_group": "connectivity_gap",
+  "declared_repair_branch": "ccec",
+  "gate_status": "candidate_fn",
+  "baseline_status": {
+    "source_hit": true,
+    "sink_hit": true,
+    "complete_taint_path_found": false,
+    "call_context_related": true,
+    "sources_marked": 1,
+    "sinks_matched": 2,
+    "findings": 0,
+    "entrypoints": 1,
+    "partial_findings": false
+  },
+  "source_forward_frontier": {
+    "available": true,
+    "frontier": "title",
+    "reached": [
+      "title"
+    ],
+    "observations": []
+  },
+  "sink_backward_dependency": {
+    "available": true,
+    "dependency_chain": [
+      "os.system(\"title \" + title)",
+      "\"title \" + title"
+    ],
+    "observations": []
+  },
+  "symbolic_callee": {
+    "present": false,
+    "callgraph": {
+      "available": false,
+      "node_count": 0,
+      "edge_count": 0,
+      "symbolic_node_count": 0,
+      "dangling_edge_count": 0,
+      "symbolic_samples": [],
+      "dangling_edge_samples": []
+    }
+  },
+  "local_structure_evidence": {
+    "available": true,
+    "kinds": [
+      "scoped_function_evidence",
+      "connectivity_candidates"
+    ],
+    "items": {
+      "dict_literals": [],
+      "calls": [],
+      "assignments": [],
+      "dict_comprehensions": [],
+      "format_operations": [],
+      "scoped_function_evidence": {
+        "functions": [
+          {
+            "name": "cve_2023_24816_driver",
+            "file": "poc/poc_cve_2023_24816_ipython.py",
+            "line": 8,
+            "args": []
+          },
+          {
+            "name": "_set_term_title",
+            "file": "source/IPython/utils/terminal.py",
+            "line": 56,
+            "args": []
+          },
+          {
+            "name": "_set_term_title",
+            "file": "source/IPython/utils/terminal.py",
+            "line": 100,
+            "args": [
+              "title"
+            ]
+          },
+          {
+            "name": "_set_term_title",
+            "file": "source/IPython/utils/terminal.py",
+            "line": 104,
+            "args": [
+              "title"
+            ]
+          },
+          {
+            "name": "set_term_title",
+            "file": "source/IPython/utils/terminal.py",
+            "line": 120,
+            "args": [
+              "title"
+            ]
+          }
+        ],
+        "assignments": [
+          {
+            "function": "cve_2023_24816_driver",
+            "file": "poc/poc_cve_2023_24816_ipython.py",
+            "line": 9,
+            "targets": [
+              "title"
+            ],
+            "expr": "title = cve_2023_24816_source()"
+          },
+          {
+            "function": "cve_2023_24816_driver",
+            "file": "poc/poc_cve_2023_24816_ipython.py",
+            "line": 10,
+            "targets": [
+              "terminal.ignore_termtitle"
+            ],
+            "expr": "terminal.ignore_termtitle = False"
+          },
+          {
+            "function": "_set_term_title",
+            "file": "source/IPython/utils/terminal.py",
+            "line": 110,
+            "targets": [
+              "curr"
+            ],
+            "expr": "curr = os.getcwd()"
+          },
+          {
+            "function": "_set_term_title",
+            "file": "source/IPython/utils/terminal.py",
+            "line": 112,
+            "targets": [
+              "ret"
+            ],
+            "expr": "ret = os.system(\"title \" + title)"
+          },
+          {
+            "function": "_set_term_title",
+            "file": "source/IPython/utils/terminal.py",
+            "line": 117,
+            "targets": [
+              "ignore_termtitle"
+            ],
+            "expr": "ignore_termtitle = True"
+          }
+        ],
+        "returns": [
+          {
+            "function": "cve_2023_24816_driver",
+            "file": "poc/poc_cve_2023_24816_ipython.py",
+            "line": 11,
+            "expr": "return terminal.set_term_title(title)"
+          },
+          {
+            "function": "set_term_title",
+            "file": "source/IPython/utils/terminal.py",
+            "line": 123,
+            "expr": "return"
+          }
+        ],
+        "calls": [
+          {
+            "function": "cve_2023_24816_driver",
+            "function_line": 8,
+            "file": "poc/poc_cve_2023_24816_ipython.py",
+            "line": 9,
+            "callee": "cve_2023_24816_source",
+            "args": [],
+            "expr": "cve_2023_24816_source()"
+          },
+          {
+            "function": "cve_2023_24816_driver",
+            "function_line": 8,
+            "file": "poc/poc_cve_2023_24816_ipython.py",
+            "line": 11,
+            "callee": "terminal.set_term_title",
+            "args": [
+              "title"
+            ],
+            "expr": "terminal.set_term_title(title)"
+          },
+          {
+            "function": "_set_term_title",
+            "function_line": 100,
+            "file": "source/IPython/utils/terminal.py",
+            "line": 102,
+            "callee": "SetConsoleTitleW",
+            "args": [
+              "title"
+            ],
+            "expr": "SetConsoleTitleW(title)"
+          },
+          {
+            "function": "_set_term_title",
+            "function_line": 104,
+            "file": "source/IPython/utils/terminal.py",
+            "line": 110,
+            "callee": "os.getcwd",
+            "args": [],
+            "expr": "os.getcwd()"
+          },
+          {
+            "function": "_set_term_title",
+            "function_line": 104,
+            "file": "source/IPython/utils/terminal.py",
+            "line": 111,
+            "callee": "os.chdir",
+            "args": [
+              "\"C:\""
+            ],
+            "expr": "os.chdir(\"C:\")"
+          },
+          {
+            "function": "_set_term_title",
+            "function_line": 104,
+            "file": "source/IPython/utils/terminal.py",
+            "line": 112,
+            "callee": "os.system",
+            "args": [
+              "\"title \" + title"
+            ],
+            "expr": "os.system(\"title \" + title)"
+          },
+          {
+            "function": "_set_term_title",
+            "function_line": 104,
+            "file": "source/IPython/utils/terminal.py",
+            "line": 114,
+            "callee": "os.chdir",
+            "args": [
+              "curr"
+            ],
+            "expr": "os.chdir(curr)"
+          },
+          {
+            "function": "set_term_title",
+            "function_line": 120,
+            "file": "source/IPython/utils/terminal.py",
+            "line": 124,
+            "callee": "_set_term_title",
+            "args": [
+              "title"
+            ],
+            "expr": "_set_term_title(title)"
+          }
+        ],
+        "dict_comprehensions": [],
+        "percent_operations": []
+      },
+      "connectivity_candidates": [
+        {
+          "kind": "module_rebinding_or_guarded_dispatch",
+          "boundary_callsite": {
+            "file": "source/IPython/utils/terminal.py",
+            "line": 124,
+            "function": "set_term_title",
+            "expr": "_set_term_title(title)",
+            "callee_symbol": "_set_term_title",
+            "args": [
+              "title"
+            ]
+          },
+          "candidate_definitions": [
+            {
+              "name": "_set_term_title",
+              "file": "source/IPython/utils/terminal.py",
+              "line": 56,
+              "args": []
+            },
+            {
+              "name": "_set_term_title",
+              "file": "source/IPython/utils/terminal.py",
+              "line": 100,
+              "args": [
+                "title"
+              ]
+            },
+            {
+              "name": "_set_term_title",
+              "file": "source/IPython/utils/terminal.py",
+              "line": 104,
+              "args": [
+                "title"
+              ]
+            }
+          ],
+          "sink_reaching_definitions": [
+            {
+              "name": "_set_term_title",
+              "file": "source/IPython/utils/terminal.py",
+              "line": 104,
+              "args": [
+                "title"
+              ],
+              "sink_calls": [
+                {
+                  "function": "_set_term_title",
+                  "function_line": 104,
+                  "file": "source/IPython/utils/terminal.py",
+                  "line": 112,
+                  "callee": "os.system",
+                  "args": [
+                    "\"title \" + title"
+                  ],
+                  "expr": "os.system(\"title \" + title)"
+                }
+              ]
+            }
+          ],
+          "suggested_virtual_edge": {
+            "from": "set_term_title._set_term_title",
+            "to": "os.system",
+            "at": "_set_term_title(title)",
+            "callee_kind": "rebound_function"
+          },
+          "suggested_materialized_edges": [
+            {
+              "from": "set_term_title._set_term_title",
+              "to": "source.IPython.utils.terminal._set_term_title#line_104",
+              "at": "_set_term_title(title)",
+              "callee_kind": "rebound_function",
+              "target": {
+                "file": "source/IPython/utils/terminal.py",
+                "line": 104,
+                "function": "_set_term_title",
+                "args": [
+                  "title"
+                ]
+              },
+              "reason": "Prefer this as a real/materialized rebound target before falling back to a virtual final-sink edge."
+            }
+          ],
+          "reason": "Observed callsite _set_term_title(title) targets local symbol _set_term_title, which has multiple definitions; at least one definition contains final sink os.system."
+        }
+      ]
+    }
+  },
+  "negative_evidence": [],
+  "explosion_risk": {
+    "level": "low",
+    "dangling_edge_count": 0,
+    "symbolic_node_count": 0
+  },
+  "decision_reason": [
+    "local structure evidence exists",
+    "source forward frontier evidence exists",
+    "sink backward dependency evidence exists"
+  ],
+  "oracle_note": "This gate identifies evidence-supported candidate FNs. Benchmark oracle fields are hidden by default and must only be used after repair for evaluation.",
+  "oracle_fallback_used": false
+}

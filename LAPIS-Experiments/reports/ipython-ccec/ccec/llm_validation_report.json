@@ -1,0 +1,24 @@
+{
+  "schema_version": "lapis.ccec_validation.v1",
+  "case_id": "cve-2023-24816-ipython",
+  "candidates": "LAPIS/LAPIS-Experiments/reports/ipython-ccec/ccec/candidate_edges.llm.json",
+  "status": "accepted",
+  "edge_results": [
+    {
+      "edge_id": "ccec-1",
+      "passed": true,
+      "missing": [],
+      "confidence": 0.88,
+      "checks": {
+        "has_caller": true,
+        "has_callsite": true,
+        "has_callee": true,
+        "has_guards": true,
+        "has_guard_evidence": true,
+        "has_evidence": true,
+        "has_positive_confidence": true
+      }
+    }
+  ],
+  "note": "This is the structural CCEC validation stage. Graph progress and taint reachability validation happen after applying accepted edges."
+}

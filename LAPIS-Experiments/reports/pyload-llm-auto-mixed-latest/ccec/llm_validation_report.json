@@ -1,0 +1,84 @@
+{
+  "schema_version": "lapis.ccec_validation.v1",
+  "case_id": "cve-2025-55156-pyload",
+  "candidates": "LAPIS/LAPIS-Experiments/reports/pyload-llm-auto-mixed-latest/ccec/candidate_edges.llm.json",
+  "status": "accepted",
+  "edge_results": [
+    {
+      "edge_id": "edge-1-db.update_link_info",
+      "passed": true,
+      "missing": [],
+      "confidence": 0.95,
+      "checks": {
+        "has_caller": true,
+        "has_callsite": true,
+        "has_callee": true,
+        "has_guards": true,
+        "has_guard_evidence": true,
+        "has_evidence": true,
+        "has_positive_confidence": true
+      }
+    },
+    {
+      "edge_id": "edge-2-add_link._next_file_order",
+      "passed": true,
+      "missing": [],
+      "confidence": 0.95,
+      "checks": {
+        "has_caller": true,
+        "has_callsite": true,
+        "has_callee": true,
+        "has_guards": true,
+        "has_guard_evidence": true,
+        "has_evidence": true,
+        "has_positive_confidence": true
+      }
+    },
+    {
+      "edge_id": "edge-3-add_links._next_file_order",
+      "passed": true,
+      "missing": [],
+      "confidence": 0.95,
+      "checks": {
+        "has_caller": true,
+        "has_callsite": true,
+        "has_callee": true,
+        "has_guards": true,
+        "has_guard_evidence": true,
+        "has_evidence": true,
+        "has_positive_confidence": true
+      }
+    },
+    {
+      "edge_id": "edge-4-add_package._next_package_order",
+      "passed": true,
+      "missing": [],
+      "confidence": 0.95,
+      "checks": {
+        "has_caller": true,
+        "has_callsite": true,
+        "has_callee": true,
+        "has_guards": true,
+        "has_guard_evidence": true,
+        "has_evidence": true,
+        "has_positive_confidence": true
+      }
+    },
+    {
+      "edge_id": "edge-5-reorder_package._next_package_order",
+      "passed": true,
+      "missing": [],
+      "confidence": 0.95,
+      "checks": {
+        "has_caller": true,
+        "has_callsite": true,
+        "has_callee": true,
+        "has_guards": true,
+        "has_guard_evidence": true,
+        "has_evidence": true,
+        "has_positive_confidence": true
+      }
+    }
+  ],
+  "note": "This is the structural CCEC validation stage. Graph progress and taint reachability validation happen after applying accepted edges."
+}

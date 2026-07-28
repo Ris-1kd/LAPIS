@@ -1,0 +1,4 @@
+{
+  "name": "keep_filename_guard_disabled_kills_flow",
+  "expected": "no_finding"
+}

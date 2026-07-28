@@ -1,0 +1,4 @@
+{
+  "name": "pymysql_percent_mapping_key_must_not_flow_value_only",
+  "expected": "no_finding"
+}

@@ -1,0 +1,62 @@
+{
+  "schema_version": "lapis.ctpc_repair_plan.v1",
+  "case_id": "cve-2024-36039-pymysql",
+  "gap_type": "propagation_gap",
+  "repair_branch": null,
+  "mode": "middle",
+  "llm_required": true,
+  "top_k": 4,
+  "candidate_count": 4,
+  "top_k_propagation_candidates": [
+    {
+      "from": "key",
+      "to": "args.keys()[*]",
+      "kind": "dict_literal_key",
+      "score": 0.92,
+      "evidence": "args = {key: \"safe-value\"}",
+      "location": "dataset/poc/poc_cve_2024_36039_pymysql.py:31"
+    },
+    {
+      "from": "format_mapping.keys()[*]",
+      "to": "query",
+      "kind": "percent_mapping_key",
+      "score": 0.88,
+      "evidence": "query = query % self._escape_args(args, conn)",
+      "location": "pymysql/cursors.py:129",
+      "function": "mogrify"
+    },
+    {
+      "from": "input_mapping.keys()[*]",
+      "to": "returned_mapping.keys()[*]",
+      "kind": "dict_comprehension_key_preserved",
+      "score": 0.86,
+      "evidence": "return {key: conn.literal(val) for (key, val) in args.items()}",
+      "location": "pymysql/cursors.py:104",
+      "function": "_escape_args"
+    },
+    {
+      "from": "arg0.keys()[*]",
+      "to": "$return.keys()[*]",
+      "kind": "return_fact_from_argument",
+      "score": 0.84,
+      "evidence": "return {key: conn.literal(val) for (key, val) in args.items()}",
+      "location": "pymysql/cursors.py:104",
+      "function": "_escape_args"
+    }
+  ],
+  "generation_strategy": "ranked_candidates_to_llm_ctpc",
+  "next_steps": [
+    "build_ctpc_prompt_with_top_k_candidates",
+    "llm_generate_ctpc_contract",
+    "llm_generate_must_flow_must_not_flow_must_kill",
+    "validate_ctpc",
+    "run_yasa_with_ctpc"
+  ],
+  "contract_mapping": {
+    "dict_literal_key": "propagation_edges",
+    "dict_comprehension_key_preserved": "propagation_edges or function_summaries",
+    "named_percent_format_mapping_key": "propagation_edges and risk_upgrades",
+    "safe_patterns": "kill_conditions"
+  },
+  "note": "CTPC top-k is a ranked candidate propagation-obligation set used while generating the contract. It is not the final CTPC; the LLM maps selected candidates into propagation_edges, function_summaries, risk_upgrades, and kill_conditions."
+}

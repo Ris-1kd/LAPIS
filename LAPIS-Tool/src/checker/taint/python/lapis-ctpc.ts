@@ -147,6 +147,13 @@ function symbolName(node: any): string | undefined {
   return /^[A-Za-z_][A-Za-z0-9_]*$/.test(text) ? text : undefined
 }
 
+function accessPathName(node: any): string | undefined {
+  const symbol = symbolName(node)
+  if (symbol) return symbol
+  const text = pretty(node)
+  return /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+$/.test(text) ? text : undefined
+}
+
 function lineOf(node: any): number | undefined {
   return node?.loc?.start?.line
 }
@@ -257,6 +264,15 @@ function genericPropagationRules(event: string): any[] {
   const summaries = Array.isArray(ctpc.function_summaries) ? ctpc.function_summaries : []
   const upgrades = Array.isArray(ctpc.risk_upgrades) ? ctpc.risk_upgrades : []
   return [...edges, ...summaries, ...upgrades].filter((rule: any) => rule.event === event)
+}
+
+function allGenericRules(): any[] {
+  const ctpc = loadCtpc()
+  if (ctpc?.schema_version !== 'ctpc.v2') return []
+  const edges = Array.isArray(ctpc.propagation_edges) ? ctpc.propagation_edges : []
+  const summaries = Array.isArray(ctpc.function_summaries) ? ctpc.function_summaries : []
+  const upgrades = Array.isArray(ctpc.risk_upgrades) ? ctpc.risk_upgrades : []
+  return [...edges, ...summaries, ...upgrades]
 }
 
 function rulesForCurrentSink(node: any, sinkRule: any): any[] {
@@ -386,7 +402,11 @@ function calleeMatches(actual: string, expected: string | undefined): boolean {
 function factFromCallReturnSummary(facts: FileFacts, callText: string, node: any, evidence: string): AccessPathFact | undefined {
   const call = callExpressionParts(callText)
   if (!call) return undefined
-  for (const summary of rulesFor('function_call', 'return_fact_from_argument')) {
+  const summaries = [
+    ...rulesFor('function_call', 'return_fact_from_argument'),
+    ...rulesFor('return', 'return_fact_from_argument'),
+  ]
+  for (const summary of summaries) {
     const pattern = summary.pattern || {}
     if (!calleeMatches(call.callee, pattern.callee)) continue
     const argIndex = Number.isInteger(pattern.argument_index) ? pattern.argument_index : 0
@@ -410,7 +430,7 @@ function recordAssignment(analyzer: any, scope: any, node: any, state: any, info
   if (!enabled()) return
   const file = node?.loc?.sourcefile
   const facts = factsFor(file)
-  const target = symbolName(node?.left)
+  const target = accessPathName(node?.left)
   if (!target) return
 
   const rightText = pretty(node?.right)
@@ -431,6 +451,80 @@ function recordAssignment(analyzer: any, scope: any, node: any, state: any, info
   recordDictLiteralKey(facts, target, rightText, node, evidence)
   recordDictComprehensionKeyPreserved(facts, target, rightText, node, evidence)
   recordPercentFormatResult(facts, target, info?.rvalue, rightText, node, evidence)
+}
+
+function traceFromRuleEvidence(rule: any): any | null {
+  const evidence = rule?.evidence || {}
+  if (!evidence.file && !evidence.line && !evidence.code) return null
+  const edgeId = rule?.edge_id || rule?.summary_id || rule?.upgrade_id || rule?.pattern?.kind || 'ctpc_fact'
+  const event = String(rule?.event || '')
+  const kind = String(rule?.pattern?.kind || '')
+  let tag = 'Var Pass: '
+  if (event === 'return') {
+    tag = 'Return Value: '
+  } else if (event === 'function_call' && kind === 'return_fact_from_argument') {
+    tag = 'Return Value: '
+  } else if (event === 'function_call') {
+    tag = 'ARG PASS: '
+  } else if (event === 'sink') {
+    tag = 'SINK: '
+  }
+  return {
+    file: evidence.file,
+    line: evidence.line,
+    code: evidence.code,
+    tag,
+    flowOrder: ctpcRuleFlowOrder(rule),
+    affectedNodeName: `LAPIS CTPC ${edgeId}: ${rule?.description || evidence.code || rule?.pattern?.kind || 'propagation fact'}`,
+  }
+}
+
+function ctpcRuleFlowOrder(rule: any): number {
+  const event = String(rule?.event || '')
+  const kind = String(rule?.pattern?.kind || '')
+  if (event === 'source') return 0
+  if (kind === 'dict_literal_key') return 20
+  if (kind === 'constructor_keyword_capture') return 20
+  if (kind === 'dict_comprehension_key_preserved' || kind === 'return_fact_from_argument') return 40
+  if (kind === 'percent_mapping_key') return 60
+  if (kind === 'filesystem_sink_argument' || kind === 'sql_sink_argument' || kind === 'sink_argument') return 80
+  if (event === 'sink') return 90
+  return 50
+}
+
+function buildTraceFactsForSink(node: any): any[] {
+  if (!enabled()) return []
+  const traces: any[] = []
+  const seen = new Set<string>()
+  for (const rule of allGenericRules()) {
+    const trace = traceFromRuleEvidence(rule)
+    if (!trace) continue
+    const key = `${trace.file || ''}:${trace.line || ''}:${trace.tag || ''}:${trace.affectedNodeName || ''}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    traces.push(trace)
+  }
+  return traces.sort((left, right) => {
+    const orderDelta = Number(left.flowOrder || 50) - Number(right.flowOrder || 50)
+    if (orderDelta !== 0) return orderDelta
+    const leftLine = Number(left.line || 0)
+    const rightLine = Number(right.line || 0)
+    return leftLine - rightLine
+  })
+}
+
+function buildTraceFactsForCcecBoundary(node: any): any[] {
+  if (!enabled()) return []
+  const traces = buildTraceFactsForSink(node)
+  if (traces.length === 0) return []
+  traces.push({
+    file: node?.loc?.sourcefile,
+    line: node?.loc?.start?.line,
+    node,
+    tag: 'ARG PASS: ',
+    affectedNodeName: 'LAPIS CTPC supplied a fact-derived source-to-boundary propagation trace; CCEC appends the repaired virtual call edge from this boundary.',
+  })
+  return traces
 }
 
 function recordIdentifier(analyzer: any, scope: any, node: any, state: any, info: any): void {
@@ -577,7 +671,7 @@ function recordPercentFormatResult(
   node: any,
   evidence: string
 ): void {
-  if (!hasPattern('assignment', 'percent_mapping_key')) return
+  if (!hasPattern('assignment', 'percent_mapping_key') && !hasPattern('binary_operation', 'percent_mapping_key')) return
   const operator = rvalue?.operator
   if (operator !== '%' && !/\s%\s/.test(rightText)) return
 
@@ -795,6 +889,8 @@ function appendDiagnostics(decision: CtpcDecision, node: any, rule: any): void {
 }
 
 module.exports = {
+  buildTraceFactsForCcecBoundary,
+  buildTraceFactsForSink,
   evaluatePythonSink,
   evaluatePythonVirtualFinalSinkBoundary,
   hasVirtualFinalSinkBoundary,

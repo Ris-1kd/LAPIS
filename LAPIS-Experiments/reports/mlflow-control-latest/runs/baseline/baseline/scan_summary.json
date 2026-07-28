@@ -1,0 +1,74 @@
+{
+  "projectName": "cve-2023-4033-mlflow",
+  "projectPath": "/home/ubuntu/llm-yasa-repair/py-bench/cve-2023-4033-mlflow/",
+  "yasaVersion": "0.3.1",
+  "parallelWorkers": 1,
+  "cgAlgorithm": "DEFAULT",
+  "dumpAllCG": false,
+  "dumpAST": false,
+  "scanStartTime": "2026-07-28T07:17:01.962Z",
+  "scanEndTime": "2026-07-28T07:18:32.491Z",
+  "findingCount": 0,
+  "language": "python",
+  "fileCount": 413,
+  "lineCount": 103168,
+  "totalTimeMs": 90529,
+  "markedSourceCount": 0,
+  "matchedSinkCount": 0,
+  "entryPointCount": 0,
+  "parseMs": 89257,
+  "parseCodeMs": 88512,
+  "preloadMs": 0,
+  "processModuleMs": 1,
+  "startAnalyzeMs": 8,
+  "symbolInterpretMs": 0,
+  "execCount": 0,
+  "execInstCount": 0,
+  "avgExecTimePerInst": 0,
+  "avgInstExecCount": 0,
+  "execTimeP70Ms": 0,
+  "execTimeP99Ms": 0,
+  "execTimeP100Ms": 0,
+  "execTimesP70": 0,
+  "execTimesP99": 0,
+  "execTimesP100": 0,
+  "ruleConfig": [
+    {
+      "checkerIds": [
+        "taint_flow_python_input_inner"
+      ],
+      "sources": {
+        "TaintSource": [
+          {
+            "path": "input_path",
+            "scopeFile": "mlflow/models/cli.py",
+            "scopeFunc": "predict",
+            "locStart": 131,
+            "locEnd": 157
+          }
+        ]
+      },
+      "sinks": {
+        "FuncCallTaintSink": [
+          {
+            "args": [
+              "0"
+            ],
+            "attribute": "PythonCommandInjection",
+            "fsig": "subprocess.Popen"
+          }
+        ]
+      },
+      "entrypoints": [
+        {
+          "filePath": "/mlflow/models/cli.py",
+          "functionName": "predict",
+          "attribute": "cve-2023-4033-mlflow-models-predict-final-sink-only"
+        }
+      ],
+      "outputAtTaint": {
+        "traceStrategy": "full"
+      }
+    }
+  ]
+}

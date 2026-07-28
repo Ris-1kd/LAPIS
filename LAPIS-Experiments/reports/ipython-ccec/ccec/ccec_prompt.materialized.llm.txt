@@ -1,0 +1,425 @@
+You are synthesizing Candidate Call-Edge Contracts (CCEC).
+
+Use only the case metadata, Evidence Gate report, and Gap Diagnosis below.
+Do not invent source functions, sink functions, files, or callees that are not
+supported by the evidence. If evidence is insufficient, return an empty
+candidate_edges array and explain why in notes.
+
+Goal:
+- Repair a missing call-graph connection, not dataflow propagation.
+- Produce candidate call edges and their guard conditions.
+- First classify the CCEC mechanism as easy, middle, or hard:
+  easy = direct static edge; middle = top-k static edges plus LLM ranking;
+  hard = dynamic/virtual/materialized edge synthesis from static evidence.
+- Every guard must be derived from baseline/static evidence and must include
+  derived_from + evidence. Do not use benchmark oracle, known final chain, or
+  case metadata breakpoint fields to create guards.
+- Keep candidates inside the observed callee universe or explicitly mark
+  materialized factory-generated callees.
+- If static_call_evidence.suggested_virtual_edges is non-empty, candidate_edges
+  must be exactly those suggested edges, or a strict subset with an evidence
+  explanation. Do not choose unrelated dangling callgraph edges from Evidence
+  Gate when a suggested virtual edge is available.
+- If evidence_gate.local_structure_evidence.connectivity_candidates is non-empty,
+  synthesize CCEC edges from those automatically extracted AST facts. Treat
+  module rebinding / guarded fallback definitions as callgraph connectivity
+  evidence, not CTPC propagation evidence.
+- If a connectivity candidate exposes suggested_materialized_edges, prefer a
+  real/materialized rebound edge to the concrete target function definition
+  (callee like module.function#line_N, callee_kind=rebound_function) over a
+  virtual edge directly to the final sink. The goal is to let YASA's ordinary
+  interprocedural taint propagation analyze the callee body after the callgraph
+  repair. Only fall back to a virtual final-sink edge when no concrete target
+  definition is present in the evidence.
+- For virtual/materialized edges, include boundary_callsite when the evidence
+  provides it; the YASA CCEC consumer uses this field to match the frontier
+  callback call.
+- Do not generate validation programs in this step. Validation sample
+  generation is handled by a separate validator stage.
+- If Gap Diagnosis reports possible_propagation_gap, repair only call edges
+  first. Mark dataflow as pending until the post-CCEC rerun confirms it.
+
+Oracle-safe mode is enabled: benchmark oracle fields and the full source-to-sink repair chain are intentionally omitted. Infer candidate edges only from the exposed static evidence.
+
+
+Return one JSON object with this exact top-level shape:
+
+{
+  "schema_version": "lapis.ccec_candidates.v1",
+  "case_id": "string",
+  "gap_type": "connectivity_gap",
+  "repair_branch": "ccec | ccec_then_ctpc",
+  "ccec_mode": "easy | middle | hard | deferred",
+  "generation_mechanism": "direct_static_edge | top_k_static_edges_then_llm_ranking | llm_synthesized_virtual_or_materialized_edge | insufficient_evidence",
+  "llm_role": "string",
+  "candidate_edges": [
+    {
+      "edge_id": "string",
+      "caller": "string",
+      "callsite": "string",
+      "boundary_callsite": "string | optional, required for virtual/materialized boundary edges",
+      "callee": "string",
+      "callee_kind": "real_function | materialized_factory_method | callback | rebound_function | builtin_sink",
+      "target": {"file": "string", "line": 0, "function": "string", "args": ["string"]},
+      "confidence": 0.0,
+      "guards": ["string"],
+      "guard_evidence": [
+        {
+          "condition": "string",
+          "derived_from": "baseline_callgraph | baseline_diagnostic | sarif | ast_callsite | ast_control_flow_guard | function_signature | import_alias | callback_registration | receiver_type",
+          "evidence": {"file": "string", "line": 0, "code": "string"}
+        }
+      ],
+      "evidence": ["string"],
+      "contract": {
+        "preconditions": ["string"],
+        "effects": [
+          {
+            "kind": "add_call_edge",
+            "from": "caller",
+            "to": "callee",
+            "at": "callsite"
+          }
+        ],
+        "must_not_apply_when": ["string"]
+      }
+    }
+  ],
+  "ranking": {
+    "top_k": 0,
+    "ranking_reason": ["string"]
+  },
+  "validation_expectations": {
+    "structural": "callee exists or can be materialized from evidence",
+    "graph_progress": "source frontier advances beyond the symbolic/dangling callsite",
+    "taint_progress": "source becomes closer to sink; possible propagation gaps require post-CCEC rediagnosis"
+  },
+  "dataflow_still_required": false,
+  "notes": ["string"]
+}
+
+Important distinction:
+- CCEC contracts may contain guards and add_call_edge effects.
+- They must not contain CTPC dataflow propagation edges.
+- must / must-not / must-kill validation samples are produced later by the
+  validator, not by this candidate synthesis prompt.
+
+Evidence:
+
+```json
+{
+  "oracle_safe_mode": true,
+  "case_id": "cve-2023-24816-ipython",
+  "project": "IPython",
+  "declared_case_group": "connectivity_gap",
+  "declared_repair_branch": "ccec",
+  "candidate_gap_type": "connectivity_gap",
+  "ccec_generation_modes": {
+    "easy": {
+      "mechanism": "direct_static_edge",
+      "llm_role": "format/explain only; do not invent candidates",
+      "condition": "single observed callsite and unique static callee evidence"
+    },
+    "middle": {
+      "mechanism": "top_k_static_edges_then_llm_ranking",
+      "llm_role": "rank candidates and refine guards from evidence",
+      "condition": "multiple plausible static callees or guard-sensitive dispatch"
+    },
+    "hard": {
+      "mechanism": "llm_synthesized_virtual_or_materialized_edge",
+      "llm_role": "synthesize a guarded dynamic edge contract from multi-source static evidence",
+      "condition": "factory/reflection/callback-table evidence without a directly materialized callee"
+    }
+  },
+  "static_call_evidence": null,
+  "evidence_gate": {
+    "gate_status": "candidate_fn",
+    "baseline_status": {
+      "source_hit": true,
+      "sink_hit": true,
+      "complete_taint_path_found": false,
+      "call_context_related": true,
+      "sources_marked": 1,
+      "sinks_matched": 2,
+      "findings": 0,
+      "entrypoints": 1,
+      "partial_findings": false
+    },
+    "source_forward_frontier": {
+      "available": true,
+      "observed_boundary": "title",
+      "observations": [],
+      "note": "Only the first observed frontier/boundary is exposed; downstream benchmark chain is hidden."
+    },
+    "sink_backward_dependency": {
+      "available": true,
+      "sink": "os.system(\"title \" + title)",
+      "argument_or_local_dependency": "\"title \" + title",
+      "observations": [],
+      "note": "Only sink-local dependencies are exposed; source-to-sink benchmark path is hidden."
+    },
+    "symbolic_callee": {
+      "present": false,
+      "callgraph": {
+        "available": false,
+        "node_count": 0,
+        "edge_count": 0,
+        "symbolic_node_count": 0,
+        "dangling_edge_count": 0,
+        "symbolic_samples": [],
+        "dangling_edge_samples": []
+      }
+    },
+    "local_structure_evidence": {
+      "available": true,
+      "kinds": [
+        "scoped_function_evidence",
+        "connectivity_candidates"
+      ],
+      "connectivity_candidates": [
+        {
+          "kind": "module_rebinding_or_guarded_dispatch",
+          "boundary_callsite": {
+            "file": "IPython/utils/terminal.py",
+            "line": 124,
+            "function": "set_term_title",
+            "expr": "_set_term_title(title)",
+            "callee_symbol": "_set_term_title",
+            "args": [
+              "title"
+            ]
+          },
+          "candidate_definitions": [
+            {
+              "name": "_set_term_title",
+              "file": "IPython/utils/terminal.py",
+              "line": 56,
+              "args": []
+            },
+            {
+              "name": "_set_term_title",
+              "file": "IPython/utils/terminal.py",
+              "line": 100,
+              "args": [
+                "title"
+              ]
+            },
+            {
+              "name": "_set_term_title",
+              "file": "IPython/utils/terminal.py",
+              "line": 104,
+              "args": [
+                "title"
+              ]
+            }
+          ],
+          "sink_reaching_definitions": [
+            {
+              "name": "_set_term_title",
+              "file": "IPython/utils/terminal.py",
+              "line": 104,
+              "args": [
+                "title"
+              ],
+              "sink_calls": [
+                {
+                  "function": "_set_term_title",
+                  "function_line": 104,
+                  "file": "IPython/utils/terminal.py",
+                  "line": 112,
+                  "callee": "os.system",
+                  "args": [
+                    "\"title \" + title"
+                  ],
+                  "expr": "os.system(\"title \" + title)"
+                }
+              ]
+            }
+          ],
+          "suggested_virtual_edge": {
+            "from": "set_term_title._set_term_title",
+            "to": "os.system",
+            "at": "_set_term_title(title)",
+            "callee_kind": "rebound_function"
+          },
+          "suggested_materialized_edges": [
+            {
+              "from": "set_term_title._set_term_title",
+              "to": "IPython.utils.terminal._set_term_title#line_104",
+              "at": "_set_term_title(title)",
+              "callee_kind": "rebound_function",
+              "target": {
+                "file": "IPython/utils/terminal.py",
+                "line": 104,
+                "function": "_set_term_title",
+                "args": [
+                  "title"
+                ]
+              },
+              "reason": "Prefer this as a real/materialized rebound target before falling back to a virtual final-sink edge."
+            }
+          ],
+          "reason": "Observed callsite _set_term_title(title) targets local symbol _set_term_title, which has multiple definitions; at least one definition contains final sink os.system."
+        }
+      ],
+      "scoped_calls": [
+        {
+          "function": "_set_term_title",
+          "function_line": 100,
+          "file": "IPython/utils/terminal.py",
+          "line": 102,
+          "callee": "SetConsoleTitleW",
+          "args": [
+            "title"
+          ],
+          "expr": "SetConsoleTitleW(title)"
+        },
+        {
+          "function": "_set_term_title",
+          "function_line": 104,
+          "file": "IPython/utils/terminal.py",
+          "line": 110,
+          "callee": "os.getcwd",
+          "args": [],
+          "expr": "os.getcwd()"
+        },
+        {
+          "function": "_set_term_title",
+          "function_line": 104,
+          "file": "IPython/utils/terminal.py",
+          "line": 111,
+          "callee": "os.chdir",
+          "args": [
+            "\"C:\""
+          ],
+          "expr": "os.chdir(\"C:\")"
+        },
+        {
+          "function": "_set_term_title",
+          "function_line": 104,
+          "file": "IPython/utils/terminal.py",
+          "line": 112,
+          "callee": "os.system",
+          "args": [
+            "\"title \" + title"
+          ],
+          "expr": "os.system(\"title \" + title)"
+        },
+        {
+          "function": "_set_term_title",
+          "function_line": 104,
+          "file": "IPython/utils/terminal.py",
+          "line": 114,
+          "callee": "os.chdir",
+          "args": [
+            "curr"
+          ],
+          "expr": "os.chdir(curr)"
+        },
+        {
+          "function": "set_term_title",
+          "function_line": 120,
+          "file": "IPython/utils/terminal.py",
+          "line": 124,
+          "callee": "_set_term_title",
+          "args": [
+            "title"
+          ],
+          "expr": "_set_term_title(title)"
+        },
+        {
+          "function": "cve_2023_24816_driver",
+          "function_line": 8,
+          "file": "poc/poc_cve_2023_24816_ipython.py",
+          "line": 9,
+          "callee": "cve_2023_24816_source",
+          "args": [],
+          "expr": "cve_2023_24816_source()"
+        },
+        {
+          "function": "cve_2023_24816_driver",
+          "function_line": 8,
+          "file": "poc/poc_cve_2023_24816_ipython.py",
+          "line": 11,
+          "callee": "terminal.set_term_title",
+          "args": [
+            "title"
+          ],
+          "expr": "terminal.set_term_title(title)"
+        }
+      ],
+      "scoped_functions": [
+        {
+          "name": "_set_term_title",
+          "file": "IPython/utils/terminal.py",
+          "line": 56,
+          "args": []
+        },
+        {
+          "name": "_set_term_title",
+          "file": "IPython/utils/terminal.py",
+          "line": 100,
+          "args": [
+            "title"
+          ]
+        },
+        {
+          "name": "_set_term_title",
+          "file": "IPython/utils/terminal.py",
+          "line": 104,
+          "args": [
+            "title"
+          ]
+        },
+        {
+          "name": "set_term_title",
+          "file": "IPython/utils/terminal.py",
+          "line": 120,
+          "args": [
+            "title"
+          ]
+        },
+        {
+          "name": "cve_2023_24816_driver",
+          "file": "poc/poc_cve_2023_24816_ipython.py",
+          "line": 8,
+          "args": []
+        }
+      ],
+      "note": "Only scoped AST facts and automatically detected connectivity candidates are exposed. Case metadata summaries/frontier arrays are omitted in oracle-safe mode."
+    },
+    "negative_evidence": [],
+    "explosion_risk": {
+      "level": "low",
+      "dangling_edge_count": 0,
+      "symbolic_node_count": 0
+    },
+    "decision_reason": [
+      "local structure evidence exists",
+      "source forward frontier evidence exists",
+      "sink backward dependency evidence exists"
+    ]
+  },
+  "gap_diagnosis": {
+    "gap_type": "connectivity_gap",
+    "confirmed_gap_type": null,
+    "primary_gap": "connectivity_gap",
+    "secondary_gap": "possible_propagation_gap",
+    "next_step": "run_ccec_first",
+    "needs_post_ccec_rediagnosis": true,
+    "rediagnosis_after": "post_ccec_rerun",
+    "reason": [
+      "symbolic/dangling or guarded/rebound call evidence indicates a Connectivity Gap",
+      "local structure/frontier/backward evidence indicates a Propagation Gap",
+      "Baseline evidence cannot confirm a mixed case before CCEC repair",
+      "Accept call-edge contracts first, rerun analysis, then diagnose whether a propagation gap remains"
+    ]
+  },
+  "omitted_oracle_fields": [
+    "manual source/sink annotations",
+    "manual breakpoint annotations",
+    "manual repair-order annotations",
+    "manual source-to-sink chain summaries"
+  ]
+}
+```

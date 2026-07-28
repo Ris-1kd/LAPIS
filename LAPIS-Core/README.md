@@ -171,13 +171,13 @@ Generate and structurally validate CCEC candidates for one case:
 ```bash
 PYTHONPATH=/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Core/src \
 python3 -m lapis generate-ccec-candidates \
-  --case /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/connectivity_gap/cve-2024-27758-rpyc/case.json \
-  --out /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/connectivity_gap/cve-2024-27758-rpyc/ccec/candidate_edges.json
+  --case /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/mixed_case/cve-2024-27758-rpyc/case.json \
+  --out /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/mixed_case/cve-2024-27758-rpyc/ccec/candidate_edges.json
 
 PYTHONPATH=/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Core/src \
 python3 -m lapis validate-ccec-candidates \
-  --candidates /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/connectivity_gap/cve-2024-27758-rpyc/ccec/candidate_edges.json \
-  --out /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/connectivity_gap/cve-2024-27758-rpyc/ccec/validation_report.json
+  --candidates /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/mixed_case/cve-2024-27758-rpyc/ccec/candidate_edges.json \
+  --out /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/mixed_case/cve-2024-27758-rpyc/ccec/validation_report.json
 ```
 
 ## Prototype Command

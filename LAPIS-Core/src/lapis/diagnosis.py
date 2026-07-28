@@ -18,6 +18,23 @@ def _has_symbolic_callee(gate: dict[str, Any]) -> bool:
     return bool(symbolic.get("present")) or int(callgraph.get("dangling_edge_count", 0) or 0) > 0
 
 
+def _has_connectivity_structure(gate: dict[str, Any]) -> bool:
+    local = gate.get("local_structure_evidence") or {}
+    kinds = set(local.get("kinds", []) or [])
+    items = local.get("items") or {}
+    if "connectivity_candidates" in kinds:
+        return True
+    baseline = gate.get("baseline_status") or {}
+    branch = gate.get("declared_repair_branch")
+    if (
+        branch in {"ccec", "ccec_then_ctpc"}
+        and bool(baseline.get("source_hit"))
+        and not bool(baseline.get("sink_hit"))
+    ):
+        return True
+    return bool(items.get("connectivity_candidates"))
+
+
 def _has_propagation_evidence(gate: dict[str, Any]) -> bool:
     local = gate.get("local_structure_evidence") or {}
     backward = gate.get("sink_backward_dependency") or {}
@@ -52,11 +69,11 @@ def diagnose_gap(gate: dict[str, Any]) -> dict[str, Any]:
             "reason": [f"Evidence Gate status is {gate_status!r}, not 'candidate_fn'"],
         }
 
-    connectivity = _has_symbolic_callee(gate)
+    connectivity = _has_symbolic_callee(gate) or _has_connectivity_structure(gate)
     propagation = _has_propagation_evidence(gate)
     reasons: list[str] = []
     if connectivity:
-        reasons.append("symbolic/dangling callee evidence indicates a Connectivity Gap")
+        reasons.append("symbolic/dangling or guarded/rebound call evidence indicates a Connectivity Gap")
     if propagation:
         reasons.append("local structure/frontier/backward evidence indicates a Propagation Gap")
 

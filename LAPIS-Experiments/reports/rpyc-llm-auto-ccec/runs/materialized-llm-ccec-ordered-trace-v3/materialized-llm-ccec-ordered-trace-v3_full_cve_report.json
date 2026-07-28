@@ -1,0 +1,142 @@
+{
+  "runner": "yasa",
+  "scope": "full-cve",
+  "label": "materialized-llm-ccec-ordered-trace-v3",
+  "case_id": "cve-2024-27758-rpyc-final-sink-only",
+  "tool_dir": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Tool",
+  "case_path": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/rpyc-llm-auto-ccec/final-sink-only-case.json",
+  "source_path": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/benchmarks/connectivity_gap/cve-2024-27758-rpyc",
+  "rule_file": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/connectivity_gap/cve-2024-27758-rpyc/rules/final-sink-only.json",
+  "uast_sdk_path": "/home/ubuntu/llm-yasa-repair/YASA-Engine-upstream/uast4py-linux-amd64",
+  "ctpc_file": null,
+  "ccec_file": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/rpyc-llm-auto-ccec/ccec/candidate_edges.llm.json",
+  "checker_ids": "taint_flow_python_input_inner",
+  "dump_cg": false,
+  "status": "reported",
+  "result": "finding",
+  "returncode": 0,
+  "report_dir": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/rpyc-llm-auto-ccec/runs/materialized-llm-ccec-ordered-trace-v3/materialized-llm-ccec-ordered-trace-v3",
+  "summary": {
+    "projectName": "cve-2024-27758-rpyc",
+    "projectPath": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/benchmarks/connectivity_gap/cve-2024-27758-rpyc/",
+    "yasaVersion": "0.3.1",
+    "parallelWorkers": 1,
+    "cgAlgorithm": "DEFAULT",
+    "dumpAllCG": false,
+    "dumpAST": false,
+    "scanStartTime": "2026-07-28T06:14:41.483Z",
+    "scanEndTime": "2026-07-28T06:14:52.954Z",
+    "findingCount": 2,
+    "language": "python",
+    "fileCount": 30,
+    "lineCount": 6497,
+    "totalTimeMs": 11471,
+    "markedSourceCount": 1,
+    "matchedSinkCount": 2,
+    "entryPointCount": 1,
+    "parseMs": 10079,
+    "parseCodeMs": 6464,
+    "preloadMs": 40,
+    "processModuleMs": 3557,
+    "startAnalyzeMs": 36,
+    "symbolInterpretMs": 743,
+    "execCount": 22860,
+    "execInstCount": 3520,
+    "avgExecTimePerInst": 0,
+    "avgInstExecCount": 6.494318181818182,
+    "execTimeP70Ms": 0,
+    "execTimeP99Ms": 0,
+    "execTimeP100Ms": 0,
+    "execTimesP70": 2,
+    "execTimesP99": 62,
+    "execTimesP100": 94,
+    "ruleConfig": [
+      {
+        "checkerIds": [
+          "taint_flow_python_input_inner"
+        ],
+        "sources": {
+          "FuncCallReturnValueTaintSource": [
+            {
+              "fsig": "cve_2024_27758_source",
+              "values": [
+                "0"
+              ],
+              "scopeFile": "poc/poc_cve_2024_27758_rpyc",
+              "scopeFunc": "cve_2024_27758_driver"
+            }
+          ]
+        },
+        "sinks": {
+          "FuncCallTaintSink": [
+            {
+              "args": [
+                "0"
+              ],
+              "attribute": "CVE-2024-27758-rpyc-pickle-deserialization",
+              "fsig": "pickle.loads"
+            }
+          ]
+        },
+        "entrypoints": [
+          {
+            "filePath": "/poc/poc_cve_2024_27758_rpyc.py",
+            "functionName": "cve_2024_27758_driver",
+            "attribute": "poc-cve-2024-27758-final-sink-only"
+          }
+        ],
+        "outputAtTaint": {
+          "traceStrategy": "full"
+        }
+      }
+    ]
+  },
+  "trace_quality": {
+    "findingCount": 2,
+    "ccecVirtualSink": false,
+    "ctpcVirtualSink": false,
+    "factTraceGap": false,
+    "ctpcFactTrace": false,
+    "actualSourceToBoundaryTrace": false,
+    "traceStatus": "reported_trace",
+    "needsCtpc": false,
+    "needsTraceReview": false,
+    "decisionBasis": "Derived from SARIF sinkAttribute and trace labels. A CCEC finding with FACT TRACE GAP means callgraph repair reached the virtual sink but source-to-boundary taint propagation is still open."
+  },
+  "run": {
+    "command": [
+      "timeout",
+      "180s",
+      "npx",
+      "tsx",
+      "src/main.ts",
+      "--sourcePath",
+      "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/benchmarks/connectivity_gap/cve-2024-27758-rpyc",
+      "--language",
+      "python",
+      "--report",
+      "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/rpyc-llm-auto-ccec/runs/materialized-llm-ccec-ordered-trace-v3/materialized-llm-ccec-ordered-trace-v3",
+      "--ruleConfigFile",
+      "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/connectivity_gap/cve-2024-27758-rpyc/rules/final-sink-only.json",
+      "--checkerIds",
+      "taint_flow_python_input_inner",
+      "--entrypointMode",
+      "ONLY_CUSTOM",
+      "--workerCount",
+      "1",
+      "--incremental",
+      "false",
+      "--taintTraceOutputStrategy",
+      "full",
+      "--uastSDKPath",
+      "/home/ubuntu/llm-yasa-repair/YASA-Engine-upstream/uast4py-linux-amd64",
+      "--lapisCcecFile",
+      "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/rpyc-llm-auto-ccec/ccec/candidate_edges.llm.json"
+    ],
+    "cwd": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Tool",
+    "returncode": 0,
+    "stdout_tail": "e: undefined,\n  funcReceiverType: ''\n}\nTrace: \n /poc/poc_cve_2024_27758_rpyc.py\n  AffectedNodeName: cve_2024_27758_source()\n  25:  SOURCE:      payload = cve_2024_27758_source()\n /poc/poc_cve_2024_27758_rpyc.py\n  AffectedNodeName: payload\n  25:  Var Pass:      payload = cve_2024_27758_source()\n /poc/poc_cve_2024_27758_rpyc.py\n  AffectedNodeName: __init__\n  27:  CALL:      proxy = netref_class(FakeConnection(payload), (\"remote.module.EvilArray\", 1, 2))\n /poc/poc_cve_2024_27758_rpyc.py\n  AffectedNodeName: payload\n  10:  ARG PASS:      def __init__(self, payload):\n /poc/poc_cve_2024_27758_rpyc.py\n  AffectedNodeName: self.payload\n  11:  Var Pass:          self.payload = payload\n /poc/poc_cve_2024_27758_rpyc.py\n  AffectedNodeName: proxy\n  27:  Var Pass:      proxy = netref_class(FakeConnection(payload), (\"remote.module.EvilArray\", 1, 2))\n /poc/poc_cve_2024_27758_rpyc.py\n  AffectedNodeName: numpy_like_array_coercion\n  28:  CALL:      return numpy_like_array_coercion(proxy)\n /poc/poc_cve_2024_27758_rpyc.py\n  AffectedNodeName: obj\n  19:  ARG PASS:  def numpy_like_array_coercion(obj):\n /poc/poc_cve_2024_27758_rpyc.py\n  AffectedNodeName: array_callback\n  20:  Var Pass:      array_callback = getattr(obj, \"__array__\")\n /source/rpyc/core/netref.py\n  AffectedNodeName: pickle.loads\n  255: SINK:              return pickle.loads(syncreq(self, consts.HANDLE_PICKLE, -1))\n\n-------------  2 :  taint_flow_python_input_inner ------------- \nDescription: Python污点分析checker，不会使用CallGraph边界制作entrypoint，蚂蚁内部使用\nFile: /source/rpyc/core/netref.py\nLine 255: pickle.loads(syncreq(self, consts.HANDLE_PICKLE, -1))\nSINK RULE: pickle.loads\nSINK Attribute: CVE-2024-27758-rpyc-pickle-deserialization\nentrypoint: \n{\n  filePath: '/poc/poc_cve_2024_27758_rpyc.py',\n  functionName: 'cve_2024_27758_driver',\n  attribute: 'poc-cve-2024-27758-final-sink-only',\n  type: 'functionCall',\n  packageName: undefined,\n  funcReceiverType: ''\n}\nTrace: \n /poc/poc_cve_2024_27758_rpyc.py\n  AffectedNodeName: cve_2024_27758_source()\n  25:  SOURCE:      payload = cve_2024_27758_source()\n /poc/poc_cve_2024_27758_rpyc.py\n  AffectedNodeName: payload\n  25:  Var Pass:      payload = cve_2024_27758_source()\n /source/rpyc/core/netref.py\n  AffectedNodeName: pickle.loads\n  255: SINK:              return pickle.loads(syncreq(self, consts.HANDLE_PICKLE, -1))\n==========================================================\n  # Total-findings : 2\n========================================================== \n\nreport is write to /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/rpyc-llm-auto-ccec/runs/materialized-llm-ccec-ordered-trace-v3/materialized-llm-ccec-ordered-trace-v3/report.sarif\n================================================================\n\nanalyze done\n[YASA] Execution completed, cost: 11471ms, heap: 79.22/110.14 MB, rss: 197.76 MB, arrayBuffers: 0.09 MB\n\n======================  Analysis Overview  =====================\nLanguage                           : python\nFiles analyzed                     : 30\nLines of code                      : 6,497\nTotal time                         : 11s418ms\nExecuted instruction               : 3520\nExecution count                    : 22860\nSources marked                     : 1\nSinks matched                      : 2\nValid entrypoints                  : 1\nFindings                           : 2\nAvg execution time per instruction : 0.00ms\nAvg instruction execution count    : 6.49\nExecution time 70%/99%/100%        : 0.00ms/0.00ms/0.00ms\nExecution times 70%/99%/100%       : 2.00/62.00/94.00\n================================================================\n\n\n===================  Performance Statistics  ===================\ntotal cost: 11s471ms\npreProcess cost: 10s79ms (87.9%)\n  parseCode cost: 6s464ms (64.1%)\n  preload cost: 0s40ms (0.4%)\n  processModule cost: 3s557ms (35.3%)\n  other cost: 0s18ms (0.2%)\nstartAnalyze cost: 0s36ms (0.3%)\nsymbolInterpret cost: 0s743ms (6.5%)\nother cost: 0s613ms (5.3%)\n================================================================\n\n",
+    "stderr_tail": ""
+  },
+  "interpretation": "This is a full original-CVE run. A finding here is evidence that the enhanced analyzer connected the case entrypoint, interprocedural execution context, CTPC access-path facts, and final sink rule on the original dataset."
+}

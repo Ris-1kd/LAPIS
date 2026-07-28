@@ -1,0 +1,964 @@
+You are synthesizing Candidate Call-Edge Contracts (CCEC).
+
+Use only the case metadata, Evidence Gate report, and Gap Diagnosis below.
+Do not invent source functions, sink functions, files, or callees that are not
+supported by the evidence. If evidence is insufficient, return an empty
+candidate_edges array and explain why in notes.
+
+Goal:
+- Repair a missing call-graph connection, not dataflow propagation.
+- Produce candidate call edges and their guard conditions.
+- First classify the CCEC mechanism as easy, middle, or hard:
+  easy = direct static edge; middle = top-k static edges plus LLM ranking;
+  hard = dynamic/virtual/materialized edge synthesis from static evidence.
+- Every guard must be derived from baseline/static evidence and must include
+  derived_from + evidence. Do not use benchmark oracle, known final chain, or
+  case metadata breakpoint fields to create guards.
+- Keep candidates inside the observed callee universe or explicitly mark
+  materialized factory-generated callees.
+- If static_call_evidence.suggested_virtual_edges is non-empty, candidate_edges
+  must be exactly those suggested edges, or a strict subset with an evidence
+  explanation. Do not choose unrelated dangling callgraph edges from Evidence
+  Gate when a suggested virtual edge is available.
+- If evidence_gate.local_structure_evidence.connectivity_candidates is non-empty,
+  synthesize CCEC edges from those automatically extracted AST facts. Treat
+  module rebinding / guarded fallback definitions as callgraph connectivity
+  evidence, not CTPC propagation evidence.
+- If a connectivity candidate exposes suggested_materialized_edges, prefer a
+  real/materialized rebound edge to the concrete target function definition
+  (callee like module.function#line_N, callee_kind=rebound_function) over a
+  virtual edge directly to the final sink. The goal is to let YASA's ordinary
+  interprocedural taint propagation analyze the callee body after the callgraph
+  repair. Only fall back to a virtual final-sink edge when no concrete target
+  definition is present in the evidence.
+- For virtual/materialized edges, include boundary_callsite when the evidence
+  provides it; the YASA CCEC consumer uses this field to match the frontier
+  callback call.
+- Do not generate validation programs in this step. Validation sample
+  generation is handled by a separate validator stage.
+- If Gap Diagnosis reports possible_propagation_gap, repair only call edges
+  first. Mark dataflow as pending until the post-CCEC rerun confirms it.
+
+Oracle-safe mode is enabled: benchmark oracle fields and the full source-to-sink repair chain are intentionally omitted. Infer candidate edges only from the exposed static evidence.
+
+
+Return one JSON object with this exact top-level shape:
+
+{
+  "schema_version": "lapis.ccec_candidates.v1",
+  "case_id": "string",
+  "gap_type": "connectivity_gap",
+  "repair_branch": "ccec | ccec_then_ctpc",
+  "ccec_mode": "easy | middle | hard | deferred",
+  "generation_mechanism": "direct_static_edge | top_k_static_edges_then_llm_ranking | llm_synthesized_virtual_or_materialized_edge | insufficient_evidence",
+  "llm_role": "string",
+  "candidate_edges": [
+    {
+      "edge_id": "string",
+      "caller": "string",
+      "callsite": "string",
+      "boundary_callsite": "string | optional, required for virtual/materialized boundary edges",
+      "callee": "string",
+      "callee_kind": "real_function | materialized_factory_method | callback | rebound_function | builtin_sink",
+      "target": {"file": "string", "line": 0, "function": "string", "args": ["string"]},
+      "confidence": 0.0,
+      "guards": ["string"],
+      "guard_evidence": [
+        {
+          "condition": "string",
+          "derived_from": "baseline_callgraph | baseline_diagnostic | sarif | ast_callsite | ast_control_flow_guard | function_signature | import_alias | callback_registration | receiver_type",
+          "evidence": {"file": "string", "line": 0, "code": "string"}
+        }
+      ],
+      "evidence": ["string"],
+      "contract": {
+        "preconditions": ["string"],
+        "effects": [
+          {
+            "kind": "add_call_edge",
+            "from": "caller",
+            "to": "callee",
+            "at": "callsite"
+          }
+        ],
+        "must_not_apply_when": ["string"]
+      }
+    }
+  ],
+  "ranking": {
+    "top_k": 0,
+    "ranking_reason": ["string"]
+  },
+  "validation_expectations": {
+    "structural": "callee exists or can be materialized from evidence",
+    "graph_progress": "source frontier advances beyond the symbolic/dangling callsite",
+    "taint_progress": "source becomes closer to sink; possible propagation gaps require post-CCEC rediagnosis"
+  },
+  "dataflow_still_required": false,
+  "notes": ["string"]
+}
+
+Important distinction:
+- CCEC contracts may contain guards and add_call_edge effects.
+- They must not contain CTPC dataflow propagation edges.
+- must / must-not / must-kill validation samples are produced later by the
+  validator, not by this candidate synthesis prompt.
+
+Evidence:
+
+```json
+{
+  "oracle_safe_mode": true,
+  "case_id": "cve-2025-55156-pyload",
+  "project": "pyLoad",
+  "declared_case_group": "mixed_case",
+  "declared_repair_branch": "ccec_then_ctpc",
+  "candidate_gap_type": "connectivity_gap",
+  "ccec_generation_modes": {
+    "easy": {
+      "mechanism": "direct_static_edge",
+      "llm_role": "format/explain only; do not invent candidates",
+      "condition": "single observed callsite and unique static callee evidence"
+    },
+    "middle": {
+      "mechanism": "top_k_static_edges_then_llm_ranking",
+      "llm_role": "rank candidates and refine guards from evidence",
+      "condition": "multiple plausible static callees or guard-sensitive dispatch"
+    },
+    "hard": {
+      "mechanism": "llm_synthesized_virtual_or_materialized_edge",
+      "llm_role": "synthesize a guarded dynamic edge contract from multi-source static evidence",
+      "condition": "factory/reflection/callback-table evidence without a directly materialized callee"
+    }
+  },
+  "static_call_evidence": null,
+  "evidence_gate": {
+    "gate_status": "candidate_fn",
+    "baseline_status": {
+      "source_hit": true,
+      "sink_hit": false,
+      "complete_taint_path_found": false,
+      "call_context_related": false,
+      "sources_marked": 2,
+      "sinks_matched": 0,
+      "findings": 0,
+      "entrypoints": 1,
+      "partial_findings": false
+    },
+    "source_forward_frontier": {
+      "available": true,
+      "observed_boundary": "url",
+      "observations": [],
+      "note": "Only the first observed frontier/boundary is exposed; downstream benchmark chain is hidden."
+    },
+    "sink_backward_dependency": {
+      "available": true,
+      "sink": "SQL f-string",
+      "argument_or_local_dependency": null,
+      "observations": [],
+      "note": "Only sink-local dependencies are exposed; source-to-sink benchmark path is hidden."
+    },
+    "symbolic_callee": {
+      "present": false,
+      "callgraph": {
+        "available": false,
+        "node_count": 0,
+        "edge_count": 0,
+        "symbolic_node_count": 0,
+        "dangling_edge_count": 0,
+        "symbolic_samples": [],
+        "dangling_edge_samples": []
+      }
+    },
+    "local_structure_evidence": {
+      "available": true,
+      "kinds": [
+        "scoped_function_evidence",
+        "connectivity_candidates"
+      ],
+      "connectivity_candidates": [
+        {
+          "kind": "receiver_method_call_to_sink_reaching_definition",
+          "boundary_callsite": {
+            "file": "poc/poc_cve_2025_55156_pyload.py",
+            "line": 18,
+            "function": "cve_2025_55156_driver",
+            "expr": "db.update_link_info(data)",
+            "callee_symbol": "db.update_link_info",
+            "method_name": "update_link_info",
+            "args": [
+              "data"
+            ]
+          },
+          "candidate_definitions": [
+            {
+              "name": "update_link_info",
+              "file": "src/pyload/core/database/file_database.py",
+              "line": 261,
+              "args": [
+                "self",
+                "data"
+              ]
+            }
+          ],
+          "sink_reaching_definitions": [
+            {
+              "name": "update_link_info",
+              "file": "src/pyload/core/database/file_database.py",
+              "line": 261,
+              "args": [
+                "self",
+                "data"
+              ],
+              "sink_calls": [
+                {
+                  "function": "update_link_info",
+                  "function_line": 261,
+                  "file": "src/pyload/core/database/file_database.py",
+                  "line": 271,
+                  "callee": "self.c.execute",
+                  "args": [
+                    "f\"SELECT id FROM links WHERE url IN ('{statuses}')\""
+                  ],
+                  "expr": "self.c.execute(f\"SELECT id FROM links WHERE url IN ('{statuses}')\")"
+                }
+              ]
+            }
+          ],
+          "suggested_materialized_edges": [
+            {
+              "from": "cve_2025_55156_driver.db.update_link_info",
+              "to": "src.pyload.core.database.file_database.update_link_info#line_261",
+              "at": "db.update_link_info(data)",
+              "callee_kind": "real_function",
+              "target": {
+                "file": "src/pyload/core/database/file_database.py",
+                "line": 261,
+                "function": "update_link_info",
+                "args": [
+                  "self",
+                  "data"
+                ]
+              },
+              "reason": "Observed receiver method call has a same-name method definition that contains the final sink call."
+            }
+          ],
+          "reason": "Observed receiver callsite db.update_link_info(data) targets method update_link_info; at least one same-name definition contains final sink self.c.execute."
+        },
+        {
+          "kind": "receiver_method_call_to_sink_reaching_definition",
+          "boundary_callsite": {
+            "file": "src/pyload/core/database/file_database.py",
+            "line": 64,
+            "function": "add_link",
+            "expr": "self._next_file_order(package)",
+            "callee_symbol": "self._next_file_order",
+            "method_name": "_next_file_order",
+            "args": [
+              "package"
+            ]
+          },
+          "candidate_definitions": [
+            {
+              "name": "_next_file_order",
+              "file": "src/pyload/core/database/file_database.py",
+              "line": 54,
+              "args": [
+                "self",
+                "package"
+              ]
+            }
+          ],
+          "sink_reaching_definitions": [
+            {
+              "name": "_next_file_order",
+              "file": "src/pyload/core/database/file_database.py",
+              "line": 54,
+              "args": [
+                "self",
+                "package"
+              ],
+              "sink_calls": [
+                {
+                  "function": "_next_file_order",
+                  "function_line": 54,
+                  "file": "src/pyload/core/database/file_database.py",
+                  "line": 55,
+                  "callee": "self.c.execute",
+                  "args": [
+                    "\"SELECT MAX(linkorder) FROM links WHERE package=?\"",
+                    "(package,)"
+                  ],
+                  "expr": "self.c.execute(\"SELECT MAX(linkorder) FROM links WHERE package=?\", (package,))"
+                }
+              ]
+            }
+          ],
+          "suggested_materialized_edges": [
+            {
+              "from": "add_link.self._next_file_order",
+              "to": "src.pyload.core.database.file_database._next_file_order#line_54",
+              "at": "self._next_file_order(package)",
+              "callee_kind": "real_function",
+              "target": {
+                "file": "src/pyload/core/database/file_database.py",
+                "line": 54,
+                "function": "_next_file_order",
+                "args": [
+                  "self",
+                  "package"
+                ]
+              },
+              "reason": "Observed receiver method call has a same-name method definition that contains the final sink call."
+            }
+          ],
+          "reason": "Observed receiver callsite self._next_file_order(package) targets method _next_file_order; at least one same-name definition contains final sink self.c.execute."
+        },
+        {
+          "kind": "receiver_method_call_to_sink_reaching_definition",
+          "boundary_callsite": {
+            "file": "src/pyload/core/database/file_database.py",
+            "line": 76,
+            "function": "add_links",
+            "expr": "self._next_file_order(package)",
+            "callee_symbol": "self._next_file_order",
+            "method_name": "_next_file_order",
+            "args": [
+              "package"
+            ]
+          },
+          "candidate_definitions": [
+            {
+              "name": "_next_file_order",
+              "file": "src/pyload/core/database/file_database.py",
+              "line": 54,
+              "args": [
+                "self",
+                "package"
+              ]
+            }
+          ],
+          "sink_reaching_definitions": [
+            {
+              "name": "_next_file_order",
+              "file": "src/pyload/core/database/file_database.py",
+              "line": 54,
+              "args": [
+                "self",
+                "package"
+              ],
+              "sink_calls": [
+                {
+                  "function": "_next_file_order",
+                  "function_line": 54,
+                  "file": "src/pyload/core/database/file_database.py",
+                  "line": 55,
+                  "callee": "self.c.execute",
+                  "args": [
+                    "\"SELECT MAX(linkorder) FROM links WHERE package=?\"",
+                    "(package,)"
+                  ],
+                  "expr": "self.c.execute(\"SELECT MAX(linkorder) FROM links WHERE package=?\", (package,))"
+                }
+              ]
+            }
+          ],
+          "suggested_materialized_edges": [
+            {
+              "from": "add_links.self._next_file_order",
+              "to": "src.pyload.core.database.file_database._next_file_order#line_54",
+              "at": "self._next_file_order(package)",
+              "callee_kind": "real_function",
+              "target": {
+                "file": "src/pyload/core/database/file_database.py",
+                "line": 54,
+                "function": "_next_file_order",
+                "args": [
+                  "self",
+                  "package"
+                ]
+              },
+              "reason": "Observed receiver method call has a same-name method definition that contains the final sink call."
+            }
+          ],
+          "reason": "Observed receiver callsite self._next_file_order(package) targets method _next_file_order; at least one same-name definition contains final sink self.c.execute."
+        },
+        {
+          "kind": "receiver_method_call_to_sink_reaching_definition",
+          "boundary_callsite": {
+            "file": "src/pyload/core/database/file_database.py",
+            "line": 86,
+            "function": "add_package",
+            "expr": "self._next_package_order(queue)",
+            "callee_symbol": "self._next_package_order",
+            "method_name": "_next_package_order",
+            "args": [
+              "queue"
+            ]
+          },
+          "candidate_definitions": [
+            {
+              "name": "_next_package_order",
+              "file": "src/pyload/core/database/file_database.py",
+              "line": 45,
+              "args": [
+                "self",
+                "queue"
+              ]
+            }
+          ],
+          "sink_reaching_definitions": [
+            {
+              "name": "_next_package_order",
+              "file": "src/pyload/core/database/file_database.py",
+              "line": 45,
+              "args": [
+                "self",
+                "queue"
+              ],
+              "sink_calls": [
+                {
+                  "function": "_next_package_order",
+                  "function_line": 45,
+                  "file": "src/pyload/core/database/file_database.py",
+                  "line": 46,
+                  "callee": "self.c.execute",
+                  "args": [
+                    "\"SELECT MAX(packageorder) FROM packages WHERE queue=?\"",
+                    "(queue,)"
+                  ],
+                  "expr": "self.c.execute(\"SELECT MAX(packageorder) FROM packages WHERE queue=?\", (queue,))"
+                }
+              ]
+            }
+          ],
+          "suggested_materialized_edges": [
+            {
+              "from": "add_package.self._next_package_order",
+              "to": "src.pyload.core.database.file_database._next_package_order#line_45",
+              "at": "self._next_package_order(queue)",
+              "callee_kind": "real_function",
+              "target": {
+                "file": "src/pyload/core/database/file_database.py",
+                "line": 45,
+                "function": "_next_package_order",
+                "args": [
+                  "self",
+                  "queue"
+                ]
+              },
+              "reason": "Observed receiver method call has a same-name method definition that contains the final sink call."
+            }
+          ],
+          "reason": "Observed receiver callsite self._next_package_order(queue) targets method _next_package_order; at least one same-name definition contains final sink self.c.execute."
+        },
+        {
+          "kind": "receiver_method_call_to_sink_reaching_definition",
+          "boundary_callsite": {
+            "file": "src/pyload/core/database/file_database.py",
+            "line": 279,
+            "function": "reorder_package",
+            "expr": "self._next_package_order(p.queue)",
+            "callee_symbol": "self._next_package_order",
+            "method_name": "_next_package_order",
+            "args": [
+              "p.queue"
+            ]
+          },
+          "candidate_definitions": [
+            {
+              "name": "_next_package_order",
+              "file": "src/pyload/core/database/file_database.py",
+              "line": 45,
+              "args": [
+                "self",
+                "queue"
+              ]
+            }
+          ],
+          "sink_reaching_definitions": [
+            {
+              "name": "_next_package_order",
+              "file": "src/pyload/core/database/file_database.py",
+              "line": 45,
+              "args": [
+                "self",
+                "queue"
+              ],
+              "sink_calls": [
+                {
+                  "function": "_next_package_order",
+                  "function_line": 45,
+                  "file": "src/pyload/core/database/file_database.py",
+                  "line": 46,
+                  "callee": "self.c.execute",
+                  "args": [
+                    "\"SELECT MAX(packageorder) FROM packages WHERE queue=?\"",
+                    "(queue,)"
+                  ],
+                  "expr": "self.c.execute(\"SELECT MAX(packageorder) FROM packages WHERE queue=?\", (queue,))"
+                }
+              ]
+            }
+          ],
+          "suggested_materialized_edges": [
+            {
+              "from": "reorder_package.self._next_package_order",
+              "to": "src.pyload.core.database.file_database._next_package_order#line_45",
+              "at": "self._next_package_order(p.queue)",
+              "callee_kind": "real_function",
+              "target": {
+                "file": "src/pyload/core/database/file_database.py",
+                "line": 45,
+                "function": "_next_package_order",
+                "args": [
+                  "self",
+                  "queue"
+                ]
+              },
+              "reason": "Observed receiver method call has a same-name method definition that contains the final sink call."
+            }
+          ],
+          "reason": "Observed receiver callsite self._next_package_order(p.queue) targets method _next_package_order; at least one same-name definition contains final sink self.c.execute."
+        }
+      ],
+      "scoped_calls": [
+        {
+          "function": "cve_2025_55156_driver",
+          "function_line": 15,
+          "file": "poc/poc_cve_2025_55156_pyload.py",
+          "line": 16,
+          "callee": "cve_2025_55156_source",
+          "args": [],
+          "expr": "cve_2025_55156_source()"
+        },
+        {
+          "function": "cve_2025_55156_driver",
+          "function_line": 15,
+          "file": "poc/poc_cve_2025_55156_pyload.py",
+          "line": 18,
+          "callee": "db.update_link_info",
+          "args": [
+            "data"
+          ],
+          "expr": "db.update_link_info(data)"
+        },
+        {
+          "function": "filecount",
+          "function_line": 12,
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 16,
+          "callee": "self.c.execute",
+          "args": [
+            "\"SELECT COUNT(*) FROM links as l INNER JOIN packages as p ON l.package=p.id WHERE p.queue=?\"",
+            "(queue,)"
+          ],
+          "expr": "self.c.execute(\n            \"SELECT COUNT(*) FROM links as l INNER JOIN packages as p ON l.package=p.id WHERE p.queue=?\",\n            (queue,),\n        )"
+        },
+        {
+          "function": "filecount",
+          "function_line": 12,
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 20,
+          "callee": "self.c.fetchone",
+          "args": [],
+          "expr": "self.c.fetchone()"
+        },
+        {
+          "function": "queuecount",
+          "function_line": 23,
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 27,
+          "callee": "self.c.execute",
+          "args": [
+            "\"SELECT COUNT(*) FROM links as l INNER JOIN packages as p ON l.package=p.id WHERE p.queue=? AND l.status NOT IN (0,4)\"",
+            "(queue,)"
+          ],
+          "expr": "self.c.execute(\n            \"SELECT COUNT(*) FROM links as l INNER JOIN packages as p ON l.package=p.id WHERE p.queue=? AND l.status NOT IN (0,4)\",\n            (queue,),\n        )"
+        },
+        {
+          "function": "queuecount",
+          "function_line": 23,
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 31,
+          "callee": "self.c.fetchone",
+          "args": [],
+          "expr": "self.c.fetchone()"
+        },
+        {
+          "function": "processcount",
+          "function_line": 34,
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 38,
+          "callee": "self.c.execute",
+          "args": [
+            "\"SELECT COUNT(*) FROM links as l INNER JOIN packages as p ON l.package=p.id WHERE p.queue=? AND l.status IN (2,3,5,7,12) AND l.id != ?\"",
+            "(queue, str(fid))"
+          ],
+          "expr": "self.c.execute(\n            \"SELECT COUNT(*) FROM links as l INNER JOIN packages as p ON l.package=p.id WHERE p.queue=? AND l.status IN (2,3,5,7,12) AND l.id != ?\",\n            (queue, str(fid)),\n        )"
+        },
+        {
+          "function": "processcount",
+          "function_line": 34,
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 40,
+          "callee": "str",
+          "args": [
+            "fid"
+          ],
+          "expr": "str(fid)"
+        },
+        {
+          "function": "processcount",
+          "function_line": 34,
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 42,
+          "callee": "self.c.fetchone",
+          "args": [],
+          "expr": "self.c.fetchone()"
+        },
+        {
+          "function": "_next_package_order",
+          "function_line": 45,
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 46,
+          "callee": "self.c.execute",
+          "args": [
+            "\"SELECT MAX(packageorder) FROM packages WHERE queue=?\"",
+            "(queue,)"
+          ],
+          "expr": "self.c.execute(\"SELECT MAX(packageorder) FROM packages WHERE queue=?\", (queue,))"
+        },
+        {
+          "function": "_next_package_order",
+          "function_line": 45,
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 47,
+          "callee": "self.c.fetchone",
+          "args": [],
+          "expr": "self.c.fetchone()"
+        },
+        {
+          "function": "_next_file_order",
+          "function_line": 54,
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 55,
+          "callee": "self.c.execute",
+          "args": [
+            "\"SELECT MAX(linkorder) FROM links WHERE package=?\"",
+            "(package,)"
+          ],
+          "expr": "self.c.execute(\"SELECT MAX(linkorder) FROM links WHERE package=?\", (package,))"
+        },
+        {
+          "function": "_next_file_order",
+          "function_line": 54,
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 56,
+          "callee": "self.c.fetchone",
+          "args": [],
+          "expr": "self.c.fetchone()"
+        },
+        {
+          "function": "add_link",
+          "function_line": 63,
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 64,
+          "callee": "self._next_file_order",
+          "args": [
+            "package"
+          ],
+          "expr": "self._next_file_order(package)"
+        },
+        {
+          "function": "add_link",
+          "function_line": 63,
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 65,
+          "callee": "self.c.execute",
+          "args": [
+            "\"INSERT INTO links(url, name, plugin, package, linkorder) VALUES(?,?,?,?,?)\"",
+            "(url, name, plugin, package, order)"
+          ],
+          "expr": "self.c.execute(\n            \"INSERT INTO links(url, name, plugin, package, linkorder) VALUES(?,?,?,?,?)\",\n            (url, name, plugin, package, order),\n        )"
+        },
+        {
+          "function": "add_links",
+          "function_line": 72,
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 76,
+          "callee": "self._next_file_order",
+          "args": [
+            "package"
+          ],
+          "expr": "self._next_file_order(package)"
+        },
+        {
+          "function": "add_links",
+          "function_line": 72,
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 77,
+          "callee": "len",
+          "args": [
+            "links"
+          ],
+          "expr": "len(links)"
+        },
+        {
+          "function": "add_links",
+          "function_line": 72,
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 77,
+          "callee": "range",
+          "args": [
+            "len(links)"
+          ],
+          "expr": "range(len(links))"
+        },
+        {
+          "function": "add_links",
+          "function_line": 72,
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 78,
+          "callee": "parse.name",
+          "args": [
+            "x[0]"
+          ],
+          "expr": "parse.name(x[0])"
+        },
+        {
+          "function": "add_links",
+          "function_line": 72,
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 78,
+          "callee": "zip",
+          "args": [
+            "links",
+            "orders"
+          ],
+          "expr": "zip(links, orders)"
+        }
+      ],
+      "scoped_functions": [
+        {
+          "name": "cve_2025_55156_source",
+          "file": "poc/poc_cve_2025_55156_pyload.py",
+          "line": 11,
+          "args": []
+        },
+        {
+          "name": "cve_2025_55156_driver",
+          "file": "poc/poc_cve_2025_55156_pyload.py",
+          "line": 15,
+          "args": [
+            "db"
+          ]
+        },
+        {
+          "name": "filecount",
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 12,
+          "args": [
+            "self",
+            "queue"
+          ]
+        },
+        {
+          "name": "queuecount",
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 23,
+          "args": [
+            "self",
+            "queue"
+          ]
+        },
+        {
+          "name": "processcount",
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 34,
+          "args": [
+            "self",
+            "queue",
+            "fid"
+          ]
+        },
+        {
+          "name": "_next_package_order",
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 45,
+          "args": [
+            "self",
+            "queue"
+          ]
+        },
+        {
+          "name": "_next_file_order",
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 54,
+          "args": [
+            "self",
+            "package"
+          ]
+        },
+        {
+          "name": "add_link",
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 63,
+          "args": [
+            "self",
+            "url",
+            "name",
+            "plugin",
+            "package"
+          ]
+        },
+        {
+          "name": "add_links",
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 72,
+          "args": [
+            "self",
+            "links",
+            "package"
+          ]
+        },
+        {
+          "name": "add_package",
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 85,
+          "args": [
+            "self",
+            "name",
+            "folder",
+            "queue"
+          ]
+        },
+        {
+          "name": "delete_package",
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 94,
+          "args": [
+            "self",
+            "p"
+          ]
+        },
+        {
+          "name": "delete_link",
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 103,
+          "args": [
+            "self",
+            "f"
+          ]
+        },
+        {
+          "name": "get_all_links",
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 111,
+          "args": [
+            "self",
+            "q"
+          ]
+        },
+        {
+          "name": "get_all_packages",
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 147,
+          "args": [
+            "self",
+            "q"
+          ]
+        },
+        {
+          "name": "get_link_data",
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 188,
+          "args": [
+            "self",
+            "id"
+          ]
+        },
+        {
+          "name": "get_package_data",
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 219,
+          "args": [
+            "self",
+            "id"
+          ]
+        },
+        {
+          "name": "update_link",
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 247,
+          "args": [
+            "self",
+            "f"
+          ]
+        },
+        {
+          "name": "update_package",
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 254,
+          "args": [
+            "self",
+            "p"
+          ]
+        },
+        {
+          "name": "update_link_info",
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 261,
+          "args": [
+            "self",
+            "data"
+          ]
+        },
+        {
+          "name": "reorder_package",
+          "file": "src/pyload/core/database/file_database.py",
+          "line": 277,
+          "args": [
+            "self",
+            "p",
+            "position",
+            "no_move"
+          ]
+        }
+      ],
+      "note": "Only scoped AST facts and automatically detected connectivity candidates are exposed. Case metadata summaries/frontier arrays are omitted in oracle-safe mode."
+    },
+    "negative_evidence": [],
+    "explosion_risk": {
+      "level": "low",
+      "dangling_edge_count": 0,
+      "symbolic_node_count": 0
+    },
+    "decision_reason": [
+      "final sink anchor exists in source but was not matched by baseline",
+      "declared repair branch is ccec_then_ctpc, so treat this as a callgraph/connectivity candidate"
+    ]
+  },
+  "gap_diagnosis": {
+    "gap_type": "connectivity_gap",
+    "confirmed_gap_type": null,
+    "primary_gap": "connectivity_gap",
+    "secondary_gap": "possible_propagation_gap",
+    "next_step": "run_ccec_first",
+    "needs_post_ccec_rediagnosis": true,
+    "rediagnosis_after": "post_ccec_rerun",
+    "reason": [
+      "symbolic/dangling or guarded/rebound call evidence indicates a Connectivity Gap",
+      "local structure/frontier/backward evidence indicates a Propagation Gap",
+      "Baseline evidence cannot confirm a mixed case before CCEC repair",
+      "Accept call-edge contracts first, rerun analysis, then diagnose whether a propagation gap remains"
+    ]
+  },
+  "omitted_oracle_fields": [
+    "manual source/sink annotations",
+    "manual breakpoint annotations",
+    "manual repair-order annotations",
+    "manual source-to-sink chain summaries"
+  ]
+}
+```

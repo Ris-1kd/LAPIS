@@ -36,7 +36,15 @@ from .llm import (
 )
 from .prompt import build_ccec_prompt, build_ccec_validation_prompt, build_ctpc_prompt, build_validation_prompt
 from .validator import build_yasa_validation_rules, validate_ctpc
-from .yasa_runner import build_feasibility_report, run_yasa_case, run_yasa_validation
+from .yasa_runner import (
+    assess_trace_quality,
+    build_feasibility_report,
+    render_finding_trace_lines,
+    render_ordered_source_to_sink_chain_lines,
+    render_reconstructed_ccec_chain_lines,
+    run_yasa_case,
+    run_yasa_validation,
+)
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -89,6 +97,13 @@ def _safe_relative(path: Path, base: Path) -> str:
         return str(path.relative_to(base))
     except ValueError:
         return str(path)
+
+
+def _safe_dataset_relative(path: Path, dataset_dir: Path, case_dir: Path) -> str:
+    try:
+        return str(path.relative_to(dataset_dir))
+    except ValueError:
+        return _safe_relative(path, case_dir)
 
 
 def _line_at(path: Path, line: int) -> str | None:
@@ -193,7 +208,7 @@ def _extract_source_forward(case_dir: Path, dataset_dir: Path, source_anchor: di
             observations.append(
                 {
                     "kind": "dict_literal",
-                    "file": str(path.relative_to(case_dir)),
+                    "file": _safe_dataset_relative(path, dataset_dir, case_dir),
                     "line": stmt.lineno,
                     "lhs": lhs,
                     "keys": keys,
@@ -204,7 +219,7 @@ def _extract_source_forward(case_dir: Path, dataset_dir: Path, source_anchor: di
             observations.append(
                 {
                     "kind": "call",
-                    "file": str(path.relative_to(case_dir)),
+                    "file": _safe_dataset_relative(path, dataset_dir, case_dir),
                     "line": stmt.lineno,
                     "callee": _call_name(stmt.value.func),
                     "args": [_segment(text, arg) for arg in stmt.value.args],
@@ -244,7 +259,7 @@ def _extract_sink_backward(case_dir: Path, dataset_dir: Path, sink_anchor: dict[
                         {
                             "kind": "assignment",
                             "function": function_name,
-                            "file": str(path.relative_to(case_dir)),
+                            "file": _safe_dataset_relative(path, dataset_dir, case_dir),
                             "line": node.lineno,
                             "targets": [_segment(text, target) for target in node.targets],
                             "expr": expr,
@@ -259,7 +274,7 @@ def _extract_sink_backward(case_dir: Path, dataset_dir: Path, sink_anchor: dict[
                         {
                             "kind": "dict_comprehension_return",
                             "function": function_name,
-                            "file": str(path.relative_to(case_dir)),
+                            "file": _safe_dataset_relative(path, dataset_dir, case_dir),
                             "line": node.lineno,
                             "expr": expr,
                         }
@@ -294,13 +309,180 @@ def _extract_structure(forward: dict[str, Any], backward: dict[str, Any]) -> dic
     }
 
 
+def _connectivity_candidates_from_scoped(
+    scoped: dict[str, Any],
+    sink_anchor: dict[str, Any],
+) -> list[dict[str, Any]]:
+    functions = scoped.get("functions", []) or []
+    calls = scoped.get("calls", []) or []
+    sink_callee = str(sink_anchor.get("callee") or "")
+    if not sink_callee:
+        return []
+
+    definitions_by_name: dict[str, list[dict[str, Any]]] = {}
+    calls_by_function: dict[tuple[str, str, int], list[dict[str, Any]]] = {}
+    for function in functions:
+        definitions_by_name.setdefault(str(function.get("name") or ""), []).append(function)
+    for call in calls:
+        key = (
+            str(call.get("file") or ""),
+            str(call.get("function") or ""),
+            int(call.get("function_line") or 0),
+        )
+        calls_by_function.setdefault(key, []).append(call)
+
+    candidates: list[dict[str, Any]] = []
+    for call in calls:
+        callee = str(call.get("callee") or "")
+        if not callee:
+            continue
+        callee_name = callee.rsplit(".", 1)[-1]
+        if "." in callee:
+            candidate_defs = definitions_by_name.get(callee_name, [])
+            sink_defs: list[dict[str, Any]] = []
+            for definition in candidate_defs:
+                key = (
+                    str(definition.get("file") or ""),
+                    str(definition.get("name") or ""),
+                    int(definition.get("line") or 0),
+                )
+                sink_calls = [
+                    nested_call
+                    for nested_call in calls_by_function.get(key, [])
+                    if nested_call.get("callee") == sink_callee
+                ]
+                if sink_calls:
+                    sink_defs.append({**definition, "sink_calls": sink_calls})
+            if sink_defs:
+                candidates.append(
+                    {
+                        "kind": "receiver_method_call_to_sink_reaching_definition",
+                        "boundary_callsite": {
+                            "file": call.get("file"),
+                            "line": call.get("line"),
+                            "function": call.get("function"),
+                            "expr": call.get("expr"),
+                            "callee_symbol": callee,
+                            "method_name": callee_name,
+                            "args": call.get("args", []),
+                        },
+                        "candidate_definitions": candidate_defs,
+                        "sink_reaching_definitions": sink_defs,
+                        "suggested_materialized_edges": [
+                            {
+                                "from": f"{call.get('function')}.{callee}",
+                                "to": (
+                                    f"{str(definition.get('file') or '')[:-3].replace('/', '.')}"
+                                    f".{definition.get('name')}#line_{definition.get('line')}"
+                                ),
+                                "at": call.get("expr"),
+                                "callee_kind": "real_function",
+                                "target": {
+                                    "file": definition.get("file"),
+                                    "line": definition.get("line"),
+                                    "function": definition.get("name"),
+                                    "args": definition.get("args", []),
+                                },
+                                "reason": "Observed receiver method call has a same-name method definition that contains the final sink call.",
+                            }
+                            for definition in sink_defs
+                        ],
+                        "reason": (
+                            f"Observed receiver callsite {call.get('expr')} targets method {callee_name}; "
+                            f"at least one same-name definition contains final sink {sink_callee}."
+                        ),
+                    }
+                )
+            continue
+        candidate_defs = definitions_by_name.get(callee, [])
+        if len(candidate_defs) < 2:
+            continue
+
+        sink_defs: list[dict[str, Any]] = []
+        for definition in candidate_defs:
+            key = (
+                str(definition.get("file") or ""),
+                str(definition.get("name") or ""),
+                int(definition.get("line") or 0),
+            )
+            sink_calls = [
+                nested_call
+                for nested_call in calls_by_function.get(key, [])
+                if nested_call.get("callee") == sink_callee
+            ]
+            if sink_calls:
+                sink_defs.append({**definition, "sink_calls": sink_calls})
+        if not sink_defs:
+            continue
+
+        candidates.append(
+            {
+                "kind": "module_rebinding_or_guarded_dispatch",
+                "boundary_callsite": {
+                    "file": call.get("file"),
+                    "line": call.get("line"),
+                    "function": call.get("function"),
+                    "expr": call.get("expr"),
+                    "callee_symbol": callee,
+                    "args": call.get("args", []),
+                },
+                "candidate_definitions": candidate_defs,
+                "sink_reaching_definitions": sink_defs,
+                "suggested_virtual_edge": {
+                    "from": f"{call.get('function')}.{callee}",
+                    "to": sink_callee,
+                    "at": call.get("expr"),
+                    "callee_kind": "rebound_function",
+                },
+                "suggested_materialized_edges": [
+                    {
+                        "from": f"{call.get('function')}.{callee}",
+                        "to": (
+                            f"{str(definition.get('file') or '')[:-3].replace('/', '.')}"
+                            f".{definition.get('name')}#line_{definition.get('line')}"
+                        ),
+                        "at": call.get("expr"),
+                        "callee_kind": "rebound_function",
+                        "target": {
+                            "file": definition.get("file"),
+                            "line": definition.get("line"),
+                            "function": definition.get("name"),
+                            "args": definition.get("args", []),
+                        },
+                        "reason": "Prefer this as a real/materialized rebound target before falling back to a virtual final-sink edge.",
+                    }
+                    for definition in sink_defs
+                ],
+                "reason": (
+                    f"Observed callsite {call.get('expr')} targets local symbol {callee}, "
+                    f"which has multiple definitions; at least one definition contains final sink {sink_callee}."
+                ),
+            }
+        )
+
+    return sorted(
+        candidates,
+        key=lambda item: (
+            str(item.get("boundary_callsite", {}).get("file") or ""),
+            int(item.get("boundary_callsite", {}).get("line") or 0),
+            str(item.get("boundary_callsite", {}).get("expr") or ""),
+        ),
+    )
+
+
 def _extract_scoped_function_evidence(case_dir: Path, dataset_dir: Path, case: dict[str, Any]) -> dict[str, Any]:
     function_names = set(case.get("analysis_scope", {}).get("functions_of_interest", []) or [])
     source_files = set(case.get("analysis_scope", {}).get("source_files", []) or [])
     sink_files = set(case.get("analysis_scope", {}).get("sink_files", []) or [])
     relative_files = sorted(source_files | sink_files)
     if not relative_files:
-        relative_files = [str(path.relative_to(dataset_dir)) for path in sorted(dataset_dir.rglob("*.py"))]
+        relative_files = sorted(
+            {
+                str((case.get("source") or {}).get("file") or ""),
+                str((case.get("sink") or {}).get("file") or ""),
+            }
+            - {""}
+        )
 
     functions: list[dict[str, Any]] = []
     assignments: list[dict[str, Any]] = []
@@ -320,9 +502,17 @@ def _extract_scoped_function_evidence(case_dir: Path, dataset_dir: Path, case: d
         for func in [node for node in ast.walk(module) if isinstance(node, ast.FunctionDef)]:
             if function_names and func.name not in function_names:
                 continue
+            def scoped_file(path: Path) -> str:
+                for root in (dataset_dir, case_dir):
+                    try:
+                        return str(path.relative_to(root))
+                    except ValueError:
+                        continue
+                return str(path)
+
             function_record = {
                 "name": func.name,
-                "file": str(path.relative_to(case_dir)),
+                "file": scoped_file(path),
                 "line": func.lineno,
                 "args": [arg.arg for arg in func.args.args],
             }
@@ -332,7 +522,7 @@ def _extract_scoped_function_evidence(case_dir: Path, dataset_dir: Path, case: d
                     expr = _segment(text, node)
                     record = {
                         "function": func.name,
-                        "file": str(path.relative_to(case_dir)),
+                        "file": scoped_file(path),
                         "line": node.lineno,
                         "targets": [_segment(text, target) for target in node.targets],
                         "expr": expr,
@@ -347,7 +537,7 @@ def _extract_scoped_function_evidence(case_dir: Path, dataset_dir: Path, case: d
                     expr = _segment(text, node)
                     record = {
                         "function": func.name,
-                        "file": str(path.relative_to(case_dir)),
+                        "file": scoped_file(path),
                         "line": node.lineno,
                         "expr": expr,
                     }
@@ -359,7 +549,8 @@ def _extract_scoped_function_evidence(case_dir: Path, dataset_dir: Path, case: d
                     calls.append(
                         {
                             "function": func.name,
-                            "file": str(path.relative_to(case_dir)),
+                            "function_line": func.lineno,
+                            "file": scoped_file(path),
                             "line": node.lineno,
                             "callee": _call_name(node.func),
                             "args": [_segment(text, arg) for arg in node.args],
@@ -849,6 +1040,19 @@ def _build_oracle_blind_mixed_evidence(
             "gap_type": ["mixed_case", "post_ccec_dataflow_gap"],
             "summary": "Local static evidence shows filename preservation into filesystem path after callback dispatch is repaired.",
         }
+    if dataset_dir:
+        scoped = _extract_scoped_function_evidence(Path("."), dataset_dir, case)
+        connectivity_candidates = _connectivity_candidates_from_scoped(scoped, sink)
+        existing_structure = evidence.get("local_structure_evidence") or {}
+        existing_structure["scoped_function_evidence"] = scoped
+        existing_structure["connectivity_candidates"] = connectivity_candidates
+        evidence["local_structure_evidence"] = existing_structure
+        if connectivity_candidates:
+            evidence["verdict"] = {
+                "is_access_path_gap_candidate": False,
+                "gap_type": ["connectivity_gap", "sink_reaching_receiver_or_rebound_call"],
+                "summary": "Local static evidence shows a callsite whose candidate target definition contains the final sink.",
+            }
     return evidence
 
 
@@ -875,6 +1079,10 @@ def build_evidence(
     sink_backward_slice = _extract_sink_backward(case_dir, dataset_dir, case["sink"])
     structure = _extract_structure(source_forward_slice, sink_backward_slice)
     structure["scoped_function_evidence"] = _extract_scoped_function_evidence(case_dir, dataset_dir, case)
+    structure["connectivity_candidates"] = _connectivity_candidates_from_scoped(
+        structure["scoped_function_evidence"],
+        case["sink"],
+    )
     candidate_edges = _generate_candidate_edges(structure)
     top_k_edges = candidate_edges[:top_k]
     candidate_access_paths = sorted(
@@ -895,17 +1103,27 @@ def build_evidence(
 
     baseline_status = _baseline_status(baseline)
 
+    connectivity_candidates = structure.get("connectivity_candidates", []) or []
     verdict = {
         "is_access_path_gap_candidate": (
             baseline_status["source_hit"]
             and baseline_status["sink_hit"]
             and baseline_status["call_context_reachable"]
             and not baseline_status["complete_taint_path_found"]
+            and not connectivity_candidates
         ),
-        "gap_type": sorted({edge["kind"] for edge in candidate_edges}) or ["access-path propagation"],
+        "gap_type": (
+            ["connectivity_gap", "module_rebinding_or_guarded_dispatch"]
+            if connectivity_candidates
+            else sorted({edge["kind"] for edge in candidate_edges}) or ["access-path propagation"]
+        ),
         "summary": (
-            "Source and final sink are both observed by baseline YASA, but no taint "
-            "finding is produced. Candidate CTPC obligations are derived from local static structure."
+            "Source and final sink are both observed by baseline YASA, but no taint finding is produced. "
+            + (
+                "Local static structure shows a guarded/rebound callsite that can require CCEC."
+                if connectivity_candidates
+                else "Candidate CTPC obligations are derived from local static structure."
+            )
         ),
     }
 
@@ -1750,6 +1968,33 @@ def main() -> None:
         print(f"findings={summary.get('findingCount', 'n/a')}")
         print(f"sources={summary.get('markedSourceCount', 'n/a')}")
         print(f"sinks={summary.get('matchedSinkCount', 'n/a')}")
+        trace_quality = report.get("trace_quality") or assess_trace_quality(Path(report["report_dir"]))
+        print(f"trace_status={trace_quality.get('traceStatus', 'n/a')}")
+        print(f"needs_ctpc={str(trace_quality.get('needsCtpc', 'n/a')).lower()}")
+        print(f"needs_trace_review={str(trace_quality.get('needsTraceReview', 'n/a')).lower()}")
+        consumption = report.get("contract_consumption") or {}
+        ccec_consumption = consumption.get("ccec") or {}
+        ctpc_consumption = consumption.get("ctpc") or {}
+        print(f"ccec_status={ccec_consumption.get('status', 'n/a')}")
+        print(f"ccec_materialized_matches={ccec_consumption.get('materializedMatched', 'n/a')}")
+        print(f"ccec_checker_matches={ccec_consumption.get('checkerMatched', 'n/a')}")
+        print(f"ctpc_status={ctpc_consumption.get('status', 'n/a')}")
+        print(f"ctpc_forced_findings={ctpc_consumption.get('forcedFindings', 'n/a')}")
+        trace_lines = render_finding_trace_lines(Path(report["report_dir"]))
+        if trace_lines:
+            print("finding_trace:")
+            for line in trace_lines:
+                print(line)
+        ordered_chain_lines = render_ordered_source_to_sink_chain_lines(report)
+        if ordered_chain_lines:
+            print("ordered_source_to_sink_chain:")
+            for line in ordered_chain_lines:
+                print(line)
+        ccec_chain_lines = render_reconstructed_ccec_chain_lines(report)
+        if ccec_chain_lines:
+            print("reconstructed_ccec_chain:")
+            for line in ccec_chain_lines:
+                print(line)
         print(f"wrote={args.out_dir / (args.label + '_full_cve_report.json')}")
     elif args.command == "build-feasibility-report":
         report = build_feasibility_report(args.ctpc_validation, args.baseline_yasa, args.out, args.enhanced_yasa)

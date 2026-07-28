@@ -71,7 +71,8 @@ mixed_case
 
 | Gap type | Case | Repair branch | Notes |
 | --- | --- | --- | --- |
-| `connectivity_gap` | `cve-2024-27758-rpyc` | CCEC | Candidates must be inferred from baseline facts. |
+| `connectivity_gap` | `cve-2024-27758-rpyc` | CCEC | LLM materializes the generated `__array__` function edge; YASA reports a complete trace without CTPC. |
+| `connectivity_gap` | `cve-2023-24816-ipython` | CCEC | LLM materializes a rebound `_set_term_title` edge; YASA reports a complete trace without CTPC. |
 | `propagation_gap` | `cve-2024-36039-pymysql` | CTPC | Candidates must be inferred from baseline facts. |
 | `mixed_case` | `cve-2026-24486-python-multipart` | CCEC then CTPC | Candidates must be inferred from baseline facts. |
 

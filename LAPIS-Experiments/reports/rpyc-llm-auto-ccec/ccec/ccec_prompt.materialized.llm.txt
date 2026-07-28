@@ -1,0 +1,375 @@
+You are synthesizing Candidate Call-Edge Contracts (CCEC).
+
+Use only the case metadata, Evidence Gate report, and Gap Diagnosis below.
+Do not invent source functions, sink functions, files, or callees that are not
+supported by the evidence. If evidence is insufficient, return an empty
+candidate_edges array and explain why in notes.
+
+Goal:
+- Repair a missing call-graph connection, not dataflow propagation.
+- Produce candidate call edges and their guard conditions.
+- First classify the CCEC mechanism as easy, middle, or hard:
+  easy = direct static edge; middle = top-k static edges plus LLM ranking;
+  hard = dynamic/virtual/materialized edge synthesis from static evidence.
+- Every guard must be derived from baseline/static evidence and must include
+  derived_from + evidence. Do not use benchmark oracle, known final chain, or
+  case metadata breakpoint fields to create guards.
+- Keep candidates inside the observed callee universe or explicitly mark
+  materialized factory-generated callees.
+- If static_call_evidence.suggested_virtual_edges is non-empty, candidate_edges
+  must be exactly those suggested edges, or a strict subset with an evidence
+  explanation. Do not choose unrelated dangling callgraph edges from Evidence
+  Gate when a suggested virtual edge is available.
+- If evidence_gate.local_structure_evidence.connectivity_candidates is non-empty,
+  synthesize CCEC edges from those automatically extracted AST facts. Treat
+  module rebinding / guarded fallback definitions as callgraph connectivity
+  evidence, not CTPC propagation evidence.
+- If a connectivity candidate exposes suggested_materialized_edges, prefer a
+  real/materialized rebound edge to the concrete target function definition
+  (callee like module.function#line_N, callee_kind=rebound_function) over a
+  virtual edge directly to the final sink. The goal is to let YASA's ordinary
+  interprocedural taint propagation analyze the callee body after the callgraph
+  repair. Only fall back to a virtual final-sink edge when no concrete target
+  definition is present in the evidence.
+- For virtual/materialized edges, include boundary_callsite when the evidence
+  provides it; the YASA CCEC consumer uses this field to match the frontier
+  callback call.
+- Do not generate validation programs in this step. Validation sample
+  generation is handled by a separate validator stage.
+- If Gap Diagnosis reports possible_propagation_gap, repair only call edges
+  first. Mark dataflow as pending until the post-CCEC rerun confirms it.
+
+Oracle-safe mode is enabled: benchmark oracle fields and the full source-to-sink repair chain are intentionally omitted. Infer candidate edges only from the exposed static evidence.
+
+
+Return one JSON object with this exact top-level shape:
+
+{
+  "schema_version": "lapis.ccec_candidates.v1",
+  "case_id": "string",
+  "gap_type": "connectivity_gap",
+  "repair_branch": "ccec | ccec_then_ctpc",
+  "ccec_mode": "easy | middle | hard | deferred",
+  "generation_mechanism": "direct_static_edge | top_k_static_edges_then_llm_ranking | llm_synthesized_virtual_or_materialized_edge | insufficient_evidence",
+  "llm_role": "string",
+  "candidate_edges": [
+    {
+      "edge_id": "string",
+      "caller": "string",
+      "callsite": "string",
+      "boundary_callsite": "string | optional, required for virtual/materialized boundary edges",
+      "callee": "string",
+      "callee_kind": "real_function | materialized_factory_method | callback | rebound_function | builtin_sink",
+      "target": {"file": "string", "line": 0, "function": "string", "args": ["string"]},
+      "confidence": 0.0,
+      "guards": ["string"],
+      "guard_evidence": [
+        {
+          "condition": "string",
+          "derived_from": "baseline_callgraph | baseline_diagnostic | sarif | ast_callsite | ast_control_flow_guard | function_signature | import_alias | callback_registration | receiver_type",
+          "evidence": {"file": "string", "line": 0, "code": "string"}
+        }
+      ],
+      "evidence": ["string"],
+      "contract": {
+        "preconditions": ["string"],
+        "effects": [
+          {
+            "kind": "add_call_edge",
+            "from": "caller",
+            "to": "callee",
+            "at": "callsite"
+          }
+        ],
+        "must_not_apply_when": ["string"]
+      }
+    }
+  ],
+  "ranking": {
+    "top_k": 0,
+    "ranking_reason": ["string"]
+  },
+  "validation_expectations": {
+    "structural": "callee exists or can be materialized from evidence",
+    "graph_progress": "source frontier advances beyond the symbolic/dangling callsite",
+    "taint_progress": "source becomes closer to sink; possible propagation gaps require post-CCEC rediagnosis"
+  },
+  "dataflow_still_required": false,
+  "notes": ["string"]
+}
+
+Important distinction:
+- CCEC contracts may contain guards and add_call_edge effects.
+- They must not contain CTPC dataflow propagation edges.
+- must / must-not / must-kill validation samples are produced later by the
+  validator, not by this candidate synthesis prompt.
+
+Evidence:
+
+```json
+{
+  "oracle_safe_mode": true,
+  "case_id": "cve-2024-27758-rpyc-final-sink-only",
+  "project": "RPyC",
+  "declared_case_group": "mixed_case",
+  "declared_repair_branch": "ccec+ctpc",
+  "candidate_gap_type": "connectivity_gap",
+  "ccec_generation_modes": {
+    "easy": {
+      "mechanism": "direct_static_edge",
+      "llm_role": "format/explain only; do not invent candidates",
+      "condition": "single observed callsite and unique static callee evidence"
+    },
+    "middle": {
+      "mechanism": "top_k_static_edges_then_llm_ranking",
+      "llm_role": "rank candidates and refine guards from evidence",
+      "condition": "multiple plausible static callees or guard-sensitive dispatch"
+    },
+    "hard": {
+      "mechanism": "llm_synthesized_virtual_or_materialized_edge",
+      "llm_role": "synthesize a guarded dynamic edge contract from multi-source static evidence",
+      "condition": "factory/reflection/callback-table evidence without a directly materialized callee"
+    }
+  },
+  "static_call_evidence": {
+    "kind": "dynamic_getattr_factory_method_evidence",
+    "observed_callsite": {
+      "file": "poc/poc_cve_2024_27758_rpyc.py",
+      "line": 21,
+      "expr": "array_callback()",
+      "enclosing_function": "numpy_like_array_coercion",
+      "attribute_name": "__array__",
+      "getattr_line": 20,
+      "getattr_expr": "array_callback = getattr(obj, \"__array__\")",
+      "callback_symbol": "array_callback",
+      "enclosing_function_start": 19,
+      "enclosing_function_end": 21
+    },
+    "factory_calls": [
+      {
+        "file": "poc/poc_cve_2024_27758_rpyc.py",
+        "line": 20,
+        "callee": "getattr",
+        "expr": "getattr(obj, \"__array__\")",
+        "method_literals": [],
+        "mentions_observed_attribute": true
+      },
+      {
+        "file": "poc/poc_cve_2024_27758_rpyc.py",
+        "line": 26,
+        "callee": "class_factory",
+        "expr": "class_factory((\"remote.module.EvilArray\", 1, 0), [(\"__array__\", \"array protocol\")])",
+        "method_literals": [
+          [
+            "__array__",
+            "array protocol"
+          ]
+        ],
+        "mentions_observed_attribute": true
+      },
+      {
+        "file": "rpyc/core/netref.py",
+        "line": 146,
+        "callee": "object.__getattribute__",
+        "expr": "object.__getattribute__(self, \"__array__\")",
+        "method_literals": [],
+        "mentions_observed_attribute": true
+      }
+    ],
+    "factory_method_branches": [
+      {
+        "file": "rpyc/core/netref.py",
+        "line": 251,
+        "factory_function": "_make_method",
+        "guard": {
+          "condition": "name == \"__array__\"",
+          "derived_from": "ast_control_flow_guard",
+          "evidence": {
+            "file": "rpyc/core/netref.py",
+            "line": 251,
+            "code": "name == \"__array__\""
+          }
+        },
+        "inner_functions": [
+          {
+            "name": "__array__",
+            "line": 252,
+            "args": [
+              "self"
+            ],
+            "calls": [
+              {
+                "line": 255,
+                "callee": "pickle.loads",
+                "expr": "pickle.loads(syncreq(self, consts.HANDLE_PICKLE, -1))"
+              },
+              {
+                "line": 255,
+                "callee": "syncreq",
+                "expr": "syncreq(self, consts.HANDLE_PICKLE, -1)"
+              }
+            ],
+            "sink_calls": [
+              {
+                "line": 255,
+                "callee": "pickle.loads",
+                "expr": "pickle.loads(syncreq(self, consts.HANDLE_PICKLE, -1))"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "file": "rpyc/core/netref.py",
+        "line": 145,
+        "factory_function": "__getattribute__",
+        "guard": {
+          "condition": "name == \"__array__\"",
+          "derived_from": "ast_control_flow_guard",
+          "evidence": {
+            "file": "rpyc/core/netref.py",
+            "line": 145,
+            "code": "name == \"__array__\""
+          }
+        },
+        "inner_functions": []
+      }
+    ],
+    "dynamic_type_sites": [
+      {
+        "file": "rpyc/core/netref.py",
+        "line": 332,
+        "expr": "type(netref_name, (BaseNetref,), ns)"
+      },
+      {
+        "file": "rpyc/core/vinegar.py",
+        "line": 142,
+        "expr": "type(fullname, (GenericException,), fakemodule)"
+      }
+    ],
+    "sink_fsigs": [
+      "pickle.loads"
+    ],
+    "suggested_virtual_edges": [
+      {
+        "edge_id": "array-boundary-to-materialized-__array__-line-252",
+        "caller": "numpy_like_array_coercion [poc_cve_2024_27758_rpyc.py : 19_21]",
+        "callsite": "array_callback()",
+        "boundary_callsite": "array_callback()",
+        "callee": "rpyc.core.netref._make_method.__array__#line_252",
+        "callee_kind": "real_function",
+        "target": {
+          "file": "rpyc/core/netref.py",
+          "line": 252,
+          "function": "__array__",
+          "args": [
+            "self"
+          ]
+        },
+        "confidence": 0.91,
+        "guards": [
+          "getattr(obj, '__array__') returns a dynamically generated __array__ method",
+          "factory call registers method tuple whose first item is '__array__'",
+          "_make_method branches on '__array__' and materializes an inner method",
+          "the boundary callsite invokes array_callback()"
+        ],
+        "guard_evidence": [
+          {
+            "condition": "callback is obtained dynamically through getattr",
+            "derived_from": "local_static_getattr",
+            "evidence": {
+              "file": "poc/poc_cve_2024_27758_rpyc.py",
+              "line": 20,
+              "code": "array_callback = getattr(obj, \"__array__\")"
+            }
+          },
+          {
+            "condition": "the observed boundary invokes the dynamically obtained callback",
+            "derived_from": "local_static_callback_call",
+            "evidence": {
+              "file": "poc/poc_cve_2024_27758_rpyc.py",
+              "line": 21,
+              "code": "array_callback()"
+            }
+          },
+          {
+            "condition": "factory receives method metadata for __array__",
+            "derived_from": "local_static_factory_registration",
+            "evidence": {
+              "file": "poc/poc_cve_2024_27758_rpyc.py",
+              "line": 26,
+              "code": "class_factory((\"remote.module.EvilArray\", 1, 0), [(\"__array__\", \"array protocol\")])"
+            }
+          },
+          {
+            "condition": "_make_method materializes the observed dynamic method",
+            "derived_from": "local_static_factory_branch",
+            "evidence": {
+              "file": "rpyc/core/netref.py",
+              "line": 251,
+              "code": "name == \"__array__\""
+            }
+          },
+          {
+            "condition": "materialized target body contains final sink pickle.loads",
+            "derived_from": "local_static_factory_inner_body",
+            "evidence": {
+              "file": "rpyc/core/netref.py",
+              "line": 255,
+              "code": "pickle.loads(syncreq(self, consts.HANDLE_PICKLE, -1))"
+            }
+          }
+        ],
+        "evidence": [
+          "poc/poc_cve_2024_27758_rpyc.py:20 obtains __array__ with getattr",
+          "poc/poc_cve_2024_27758_rpyc.py:21 calls array_callback()",
+          "poc/poc_cve_2024_27758_rpyc.py:26 registers __array__ in factory metadata",
+          "rpyc/core/netref.py:251 defines the factory branch for __array__",
+          "rpyc/core/netref.py:252 defines generated __array__ inside _make_method",
+          "rpyc/core/netref.py:255 target body calls final sink pickle.loads(syncreq(self, consts.HANDLE_PICKLE, -1))"
+        ],
+        "contract": {
+          "preconditions": [
+            "getattr(obj, '__array__') returns a dynamically generated __array__ method",
+            "factory call registers method tuple whose first item is '__array__'",
+            "_make_method branches on '__array__' and materializes an inner method",
+            "the boundary callsite invokes array_callback()"
+          ],
+          "effects": [
+            {
+              "kind": "add_call_edge",
+              "from": "array_callback()",
+              "to": "rpyc.core.netref._make_method.__array__#line_252",
+              "at": "poc/poc_cve_2024_27758_rpyc.py:21"
+            }
+          ],
+          "must_not_apply_when": [
+            "method metadata does not include __array__",
+            "the boundary callsite is not array_callback()",
+            "the generated method body does not come from the __array__ branch"
+          ]
+        }
+      }
+    ],
+    "ranking_hints": [
+      "Connect getattr(obj, observed_attribute) only to factory methods that materialize the same attribute.",
+      "Prefer factory branches whose guard equals the observed attribute name.",
+      "Require a dynamic type(..., namespace) site before materializing generated methods.",
+      "If suggested_virtual_edges is non-empty, emit those edges and do not choose unrelated baseline dangling edges."
+    ],
+    "discovery": {
+      "strategy": "auto_scan_dynamic_getattr_factory_sink",
+      "oracle_blind": true,
+      "note": "Derived from local AST, rule sink fsigs, and factory registration evidence; benchmark breakpoint fields were not read."
+    }
+  },
+  "evidence_gate": null,
+  "gap_diagnosis": null,
+  "omitted_oracle_fields": [
+    "manual source/sink annotations",
+    "manual breakpoint annotations",
+    "manual repair-order annotations",
+    "manual source-to-sink chain summaries"
+  ]
+}
+```

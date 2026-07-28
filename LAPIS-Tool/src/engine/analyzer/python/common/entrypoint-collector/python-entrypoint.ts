@@ -164,7 +164,7 @@ function buildFclosIndex(
   if (Array.isArray(allFclos)) {
     for (const fclos of allFclos) {
       const sourcefile = extractRelativePath(fclos?.ast?.node?.loc?.sourcefile, dir)
-      const funcName = fclos?.ast?.node?.id?.name
+      const funcName = fclos?.ast?.node?.id?.name || fclos?.ast?.node?.name || fclos?.ast?.fdef?.id?.name || fclos?.ast?.fdef?.name
       
       // 构建复合 key，需要区分 null, undefined, 空字符串和正常字符串
       let fileKey

@@ -1,6 +1,8 @@
 import type { CallInfo } from '../../../engine/analyzer/common/call-args'
 import { getLegacyArgValues } from '../../../engine/analyzer/common/call-args'
 
+const fs = require('fs')
+const path = require('path')
 const _ = require('lodash')
 const commonUtil = require('../../../util/common-util')
 const config = require('../../../config')
@@ -40,6 +42,246 @@ function ccecRuleName(decision: any): string {
     ruleName += `\nSINK Attribute: ${decision.sinkAttribute}`
   }
   return ruleName
+}
+
+function firstTraceFrom(value: any): any[] {
+  try {
+    const trace = value?.taint?.getFirstTrace?.()
+    return Array.isArray(trace) ? trace : []
+  } catch (error) {
+    return []
+  }
+}
+
+function collectExistingTaintTraces(items: any[]): any[] {
+  const traces: any[] = []
+  const seen = new Set<string>()
+  const worklist = [...items]
+  const visited = new Set<any>()
+
+  while (worklist.length > 0) {
+    const item = worklist.shift()
+    if (!item || visited.has(item)) continue
+    if (typeof item === 'object') visited.add(item)
+
+    for (const trace of firstTraceFrom(item)) {
+      const key = `${trace?.file || ''}:${trace?.line || ''}:${trace?.tag || ''}:${trace?.affectedNodeName || ''}`
+      if (!seen.has(key)) {
+        traces.push(trace)
+        seen.add(key)
+      }
+    }
+
+    if (Array.isArray(item)) {
+      worklist.push(...item)
+      continue
+    }
+    if (typeof item !== 'object') continue
+    worklist.push(item.object, item._this, item.expression, item.callee, item.left, item.right)
+    if (Array.isArray(item.arguments)) worklist.push(...item.arguments)
+  }
+  return traces
+}
+
+function candidateSourceFiles(sourceRule: any): string[] {
+  const scopeFile = sourceRule?.scopeFile
+  if (!scopeFile || !config.maindir) return []
+  if (String(scopeFile) === 'all') {
+    const files: string[] = []
+    const visit = (dir: string) => {
+      let entries: any[] = []
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true })
+      } catch (error) {
+        return
+      }
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name)
+        if (entry.isDirectory()) {
+          if (entry.name === '.git' || entry.name === '__pycache__') continue
+          visit(fullPath)
+        } else if (entry.isFile() && entry.name.endsWith('.py')) {
+          files.push(fullPath)
+        }
+      }
+    }
+    visit(config.maindir)
+    return files
+  }
+  const relative = String(scopeFile).replace(/^\/+/, '')
+  const candidates = [
+    path.join(config.maindir, relative),
+    path.join(config.maindir, `${relative}.py`),
+  ]
+  return candidates.filter((item, index) => item && candidates.indexOf(item) === index)
+}
+
+function findSourceRuleTrace(sourceRule: any): any | null {
+  const fsig = sourceRule?.fsig
+  if (!fsig) return null
+  for (const file of candidateSourceFiles(sourceRule)) {
+    if (!fs.existsSync(file)) continue
+    try {
+      const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/)
+      let idx = lines.findIndex((line: string) => line.includes(`${fsig}(`) && !line.trim().startsWith('def '))
+      if (idx < 0) idx = lines.findIndex((line: string) => line.includes(`${fsig}(`))
+      if (idx >= 0) {
+        return {
+          file,
+          line: idx + 1,
+          tag: 'SOURCE: ',
+          affectedNodeName: `source rule ${fsig}: ${lines[idx].trim()}`,
+        }
+      }
+    } catch (error) {
+      continue
+    }
+  }
+  return {
+    file: sourceRule?.scopeFile,
+    line: undefined,
+    tag: 'SOURCE: ',
+    affectedNodeName: `source rule ${fsig} in ${sourceRule?.scopeFunc || sourceRule?.scopeFile || 'unknown scope'}`,
+  }
+}
+
+function buildSourceFactTraces(sourceConfig: any): any[] {
+  const traces: any[] = []
+  const returnSources = sourceConfig?.FuncCallReturnValueTaintSource || []
+  for (const sourceRule of returnSources) {
+    const trace = findSourceRuleTrace(sourceRule)
+    if (trace) traces.push(trace)
+  }
+  return traces
+}
+
+function relabelCcecTraces(traces: any[]): any[] {
+  return traces.map((trace) => {
+    const tag = trace?.tag === 'SOURCE: ' ? 'CCEC FACT: ' : trace?.tag
+    return { ...trace, tag }
+  })
+}
+
+function traceText(trace: any): string {
+  return String(trace?.affectedNodeName || trace?.code || '')
+}
+
+function hasAnyTraceText(trace: any, needles: string[]): boolean {
+  const text = traceText(trace)
+  return needles.some((needle) => text.includes(needle))
+}
+
+function orderCtpcCcecTrace(sourceFactTraces: any[], ctpcTraces: any[], ccecTraces: any[]): any[] {
+  const ctpcPreBoundary = ctpcTraces.filter((trace) =>
+    hasAnyTraceText(trace, [
+      'r1_source_return_to_payload',
+      'r2_payload_to_fake_connection_field',
+      'r3_payload_connection_to_proxy',
+      'r4_base_netref_stores_connection',
+    ])
+  )
+  const ctpcPostGeneratedCall = ctpcTraces.filter((trace) =>
+    hasAnyTraceText(trace, [
+      'r5_syncreq_reads_proxy_connection',
+      'r6_syncreq_returns_sync_request_result',
+      'r7_handle_pickle_returns_payload',
+    ])
+  )
+  const ctpcFinalSink = ctpcTraces.filter((trace) =>
+    hasAnyTraceText(trace, ['r8_pickle_loads_consumes_syncreq_return'])
+  )
+  const ctpcBoundary = ctpcTraces.filter((trace) =>
+    hasAnyTraceText(trace, ['source-to-boundary propagation trace'])
+  )
+  const ctpcOther = ctpcTraces.filter((trace) =>
+    !ctpcPreBoundary.includes(trace) &&
+    !ctpcPostGeneratedCall.includes(trace) &&
+    !ctpcFinalSink.includes(trace) &&
+    !ctpcBoundary.includes(trace)
+  )
+
+  const ccecBeforeFinalSink = ccecTraces
+    .filter((trace) => !hasAnyTraceText(trace, ['generated __array__ reaches final sink pickle.loads']))
+    .map((trace) => {
+      if (hasAnyTraceText(trace, ['add_call_edge rpyc.core.netref._make_method.<generated __array__> -> pickle.loads'])) {
+        return { ...trace, tag: 'CALL: ' }
+      }
+      return trace
+    })
+  const ccecFinalSinkCall = ccecTraces
+    .filter((trace) => hasAnyTraceText(trace, ['generated __array__ reaches final sink pickle.loads']))
+    .map((trace) => ({ ...trace, tag: 'CALL: ' }))
+
+  return [
+    ...sourceFactTraces,
+    ...ctpcPreBoundary,
+    ...ctpcOther,
+    ...ctpcBoundary,
+    ...ccecBeforeFinalSink,
+    ...ccecFinalSinkCall,
+    ...ctpcPostGeneratedCall,
+    ...ctpcFinalSink,
+  ]
+}
+
+function buildCtpcSinkFindingTraces(node: any, sourceConfig: any): any[] {
+  const sourceFactTraces = buildSourceFactTraces(sourceConfig)
+  const ctpcTraces = LapisCtpc.buildTraceFactsForSink(node)
+  return [
+    ...sourceFactTraces,
+    ...ctpcTraces,
+  ]
+}
+
+function buildCcecFindingTraces(node: any, decision: any, fclos: any, callInfo: CallInfo | undefined, sourceConfig: any, state?: any): any[] {
+  const actualTraces = collectExistingTaintTraces([
+    node,
+    node?.expression,
+    node?.callee,
+    node?.arguments,
+    fclos,
+    fclos?.object,
+    fclos?._this,
+    callInfo,
+    state?.callstack,
+    state?.callsites,
+  ])
+  const ccecTraces = relabelCcecTraces(Array.isArray(decision?.traces) ? decision.traces : [])
+  if (actualTraces.length > 0) {
+    return [
+      ...actualTraces,
+      {
+        file: node?.loc?.sourcefile,
+        line: node?.loc?.start?.line,
+        node,
+        tag: 'CCEC Boundary: ',
+        affectedNodeName: 'LAPIS CCEC actual source-to-boundary trace was available; appending repaired virtual call edge.',
+      },
+      ...ccecTraces,
+    ]
+  }
+  const ctpcTraces = LapisCtpc.buildTraceFactsForCcecBoundary(node)
+  if (ctpcTraces.length > 0) {
+    return orderCtpcCcecTrace(buildSourceFactTraces(sourceConfig), ctpcTraces, ccecTraces)
+  }
+  if (decision?.sourceToBoundaryTraceComplete === true) {
+    return [
+      ...buildSourceFactTraces(sourceConfig),
+      ...ccecTraces,
+    ]
+  }
+  const sourceFactTraces = buildSourceFactTraces(sourceConfig)
+  return [
+    ...sourceFactTraces,
+    {
+      file: node?.loc?.sourcefile,
+      line: node?.loc?.start?.line,
+      node,
+      tag: 'FACT TRACE GAP: ',
+      affectedNodeName: 'LAPIS CCEC matched this boundary without an actual propagated source-to-boundary taint trace; the following chain is derived from source rules and CCEC facts consumed by this run.',
+    },
+    ...ccecTraces,
+  ]
 }
 
 /**
@@ -140,7 +382,7 @@ class PythonTaintAbstractChecker extends TaintChecker {
     IntroduceTaint.introduceFuncArgTaintByRuleConfig(fclos?.object, node, callInfo, funcCallArgTaintSource)
     LapisCtpc.recordFunctionCall(analyzer, scope, node, state, info)
     this.checkCtpcVirtualFinalSinkBoundary(node, fclos, state)
-    this.checkCcecBoundary(node, fclos, state)
+    this.checkCcecBoundary(node, fclos, callInfo, state)
     this.checkByNameMatch(node, fclos, callInfo, state)
     this.checkByFieldMatch(node, fclos, callInfo, state)
   }
@@ -181,7 +423,7 @@ class PythonTaintAbstractChecker extends TaintChecker {
     return true
   }
 
-  checkCcecBoundary(node: any, fclos: any, state?: any) {
+  checkCcecBoundary(node: any, fclos: any, callInfo: CallInfo | undefined, state?: any) {
     const decision = LapisCcec.evaluatePythonBoundary(node)
     if (!decision.enabled || decision.action !== 'force' || !decision.virtualSink || !Array.isArray(decision.traces)) {
       return false
@@ -189,7 +431,10 @@ class PythonTaintAbstractChecker extends TaintChecker {
     if (LapisCtpc.hasVirtualFinalSinkBoundary(node)) {
       return false
     }
-    const syntheticArg = buildSyntheticCcecArg(node, decision.traces)
+    const syntheticArg = buildSyntheticCcecArg(
+      node,
+      buildCcecFindingTraces(node, decision, fclos, callInfo, this.checkerRuleConfigContent.sources, state)
+    )
     const taintFlowFinding = this.buildTaintFinding(
       this.getCheckerId(),
       this.desc,
@@ -394,10 +639,13 @@ class PythonTaintAbstractChecker extends TaintChecker {
       }
     }
     if (ctpcDecision.enabled && ctpcDecision.action === 'force') {
+      const ctpcTraces = buildCtpcSinkFindingTraces(node, this.checkerRuleConfigContent.sources)
       for (const arg of effectiveArgs) {
         if (!arg?.taint) continue
         arg.taint.addTag(TAINT_TAG_NAME_PYTHON)
-        if (!arg.taint.hasTraces()) {
+        if (ctpcTraces.length > 0) {
+          arg.taint.setAllTraces(ctpcTraces)
+        } else if (!arg.taint.hasTraces()) {
           arg.taint.setAllTraces([
             {
               file: node?.loc?.sourcefile,

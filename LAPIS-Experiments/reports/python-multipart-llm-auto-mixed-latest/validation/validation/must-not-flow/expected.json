@@ -1,0 +1,4 @@
+{
+  "name": "nearby_unsupported_fieldname_and_data_bytes_do_not_flow",
+  "expected": "no_finding"
+}

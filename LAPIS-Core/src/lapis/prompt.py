@@ -181,10 +181,19 @@ def _oracle_safe_sink_dependency(dependency: dict[str, Any] | None) -> dict[str,
 def _oracle_safe_structure(structure: dict[str, Any] | None) -> dict[str, Any] | None:
     if not structure:
         return None
+    items = structure.get("items") or {}
+    connectivity_candidates = items.get("connectivity_candidates") or []
+    scoped = items.get("scoped_function_evidence") or {}
     return {
         "available": structure.get("available"),
         "kinds": structure.get("kinds", []),
-        "note": "Case metadata summaries/frontier arrays are omitted in oracle-safe mode.",
+        "connectivity_candidates": connectivity_candidates[:5],
+        "scoped_calls": (scoped.get("calls") or [])[:20],
+        "scoped_functions": (scoped.get("functions") or [])[:20],
+        "note": (
+            "Only scoped AST facts and automatically detected connectivity candidates are exposed. "
+            "Case metadata summaries/frontier arrays are omitted in oracle-safe mode."
+        ),
     }
 
 
@@ -736,7 +745,10 @@ def _suggest_dynamic_virtual_edges(
             ]
             if not sink_calls:
                 continue
-            generated = f"{_module_hint(branch['file'])}.{branch['factory_function']}.<generated {attribute_name}>"
+            generated = (
+                f"{_module_hint(branch['file'])}.{branch['factory_function']}"
+                f".{inner.get('name')}#line_{inner.get('line')}"
+            )
             if generated in generated_seen:
                 continue
             generated_seen.add(generated)
@@ -788,12 +800,18 @@ def _suggest_dynamic_virtual_edges(
             if callback_symbol:
                 guards.append(f"the boundary callsite invokes {callback_symbol}()")
             first_edge = {
-                "edge_id": f"{attribute_name.strip('_') or 'dynamic'}-boundary-to-generated-method",
+                "edge_id": f"{attribute_name.strip('_') or 'dynamic'}-boundary-to-materialized-{inner.get('name')}-line-{inner.get('line')}",
                 "caller": caller,
                 "callsite": boundary_callsite,
                 "boundary_callsite": boundary_callsite,
                 "callee": generated,
-                "callee_kind": "materialized_factory_method",
+                "callee_kind": "real_function",
+                "target": {
+                    "file": branch.get("file"),
+                    "line": inner.get("line"),
+                    "function": inner.get("name"),
+                    "args": inner.get("args") or [],
+                },
                 "confidence": 0.91,
                 "guards": guards,
                 "guard_evidence": guard_evidence,
@@ -820,52 +838,24 @@ def _suggest_dynamic_virtual_edges(
                     ],
                 },
             }
-            sink_edge = {
-                "edge_id": f"{attribute_name.strip('_') or 'dynamic'}-generated-method-to-{sink_call['callee'].replace('.', '-')}",
-                "caller": generated,
-                "callsite": sink_call["expr"],
-                "callee": sink_call["callee"],
-                "callee_kind": "builtin_sink",
-                "confidence": 0.94,
-                "guards": [
-                    f"generated {attribute_name} body contains {sink_call['callee']}",
-                    f"the configured final sink fsig is {sink_call['callee']}",
-                ],
-                "guard_evidence": [
-                    {
-                        "condition": f"generated {attribute_name} reaches final sink {sink_call['callee']}",
-                        "derived_from": "local_static_factory_inner_body",
-                        "evidence": {
-                            "file": branch.get("file"),
-                            "line": sink_call.get("line"),
-                            "code": sink_call.get("expr"),
-                        },
-                    }
-                ],
-                "evidence": [
+            first_edge["guard_evidence"].append(
+                {
+                    "condition": f"materialized target body contains final sink {sink_call['callee']}",
+                    "derived_from": "local_static_factory_inner_body",
+                    "evidence": {
+                        "file": branch.get("file"),
+                        "line": sink_call.get("line"),
+                        "code": sink_call.get("expr"),
+                    },
+                }
+            )
+            first_edge["evidence"].extend(
+                [
                     f"{branch.get('file')}:{inner.get('line')} defines generated {inner.get('name')} inside {branch['factory_function']}",
-                    f"{branch.get('file')}:{sink_call.get('line')} calls final sink {sink_call['expr']}",
-                ],
-                "contract": {
-                    "preconditions": [
-                        f"execution is inside generated {attribute_name}",
-                        f"the configured final sink fsig is {sink_call['callee']}",
-                    ],
-                    "effects": [
-                        {
-                            "kind": "add_call_edge",
-                            "from": generated,
-                            "to": sink_call["callee"],
-                            "at": f"{branch.get('file')}:{sink_call.get('line')}",
-                        }
-                    ],
-                    "must_not_apply_when": [
-                        f"the generated closure is not {attribute_name}",
-                        f"the sink call is not {sink_call['callee']}",
-                    ],
-                },
-            }
-            edges.extend([first_edge, sink_edge])
+                    f"{branch.get('file')}:{sink_call.get('line')} target body calls final sink {sink_call['expr']}",
+                ]
+            )
+            edges.append(first_edge)
     return edges
 
 
@@ -1077,6 +1067,17 @@ Goal:
   must be exactly those suggested edges, or a strict subset with an evidence
   explanation. Do not choose unrelated dangling callgraph edges from Evidence
   Gate when a suggested virtual edge is available.
+- If evidence_gate.local_structure_evidence.connectivity_candidates is non-empty,
+  synthesize CCEC edges from those automatically extracted AST facts. Treat
+  module rebinding / guarded fallback definitions as callgraph connectivity
+  evidence, not CTPC propagation evidence.
+- If a connectivity candidate exposes suggested_materialized_edges, prefer a
+  real/materialized rebound edge to the concrete target function definition
+  (callee like module.function#line_N, callee_kind=rebound_function) over a
+  virtual edge directly to the final sink. The goal is to let YASA's ordinary
+  interprocedural taint propagation analyze the callee body after the callgraph
+  repair. Only fall back to a virtual final-sink edge when no concrete target
+  definition is present in the evidence.
 - For virtual/materialized edges, include boundary_callsite when the evidence
   provides it; the YASA CCEC consumer uses this field to match the frontier
   callback call.
@@ -1104,6 +1105,7 @@ Return one JSON object with this exact top-level shape:
       "boundary_callsite": "string | optional, required for virtual/materialized boundary edges",
       "callee": "string",
       "callee_kind": "real_function | materialized_factory_method | callback | rebound_function | builtin_sink",
+      "target": {{"file": "string", "line": 0, "function": "string", "args": ["string"]}},
       "confidence": 0.0,
       "guards": ["string"],
       "guard_evidence": [

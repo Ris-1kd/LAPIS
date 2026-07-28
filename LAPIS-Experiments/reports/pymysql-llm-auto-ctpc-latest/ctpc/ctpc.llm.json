@@ -1,0 +1,109 @@
+{
+  "schema_version": "ctpc.v2",
+  "contract_name": "pymysql_percent_mapping_key_ctpc",
+  "gap_type": [
+    "missing_access_path_propagation"
+  ],
+  "applies_to": {
+    "language": "python",
+    "risk_kind": "sql_injection"
+  },
+  "fact_types": [
+    {
+      "name": "mapping_key",
+      "shape": {
+        "access_path": "$obj.keys()[*]"
+      }
+    }
+  ],
+  "propagation_edges": [
+    {
+      "edge_id": "e1_dict_literal_key_capture",
+      "event": "assignment",
+      "pattern": {
+        "kind": "dict_literal_key",
+        "argument_index": 0
+      },
+      "from": {
+        "fact": "mapping_key",
+        "expr": "key"
+      },
+      "to": {
+        "fact": "mapping_key",
+        "expr": "args",
+        "access_path": "args.keys()[*]",
+        "risk_kind": "sql_injection"
+      },
+      "evidence": {
+        "file": "dataset/poc/poc_cve_2024_36039_pymysql.py",
+        "line": 31,
+        "code": "args = {key: \"safe-value\"}"
+      },
+      "description": "Propagate taint from a user-controlled variable used as a dict key into the dictionary's keys access-path."
+    },
+    {
+      "edge_id": "e2_percent_mapping_key_to_query",
+      "event": "binary_operation",
+      "pattern": {
+        "kind": "percent_mapping_key",
+        "argument_index": 1
+      },
+      "from": {
+        "fact": "mapping_key",
+        "expr": "format_mapping.keys()[*]"
+      },
+      "to": {
+        "fact": "mapping_key",
+        "expr": "query",
+        "access_path": "query",
+        "risk_kind": "sql_injection"
+      },
+      "evidence": {
+        "file": "dataset/pymysql/cursors.py",
+        "line": 129,
+        "code": "query = query % self._escape_args(args, conn)"
+      },
+      "description": "Propagate taint from mapping keys used in percent-format substitution into the formatted SQL query string."
+    }
+  ],
+  "function_summaries": [
+    {
+      "summary_id": "fs1__escape_args_keys_preserved",
+      "event": "return",
+      "pattern": {
+        "kind": "return_fact_from_argument",
+        "callee": "_escape_args",
+        "argument_index": 0,
+        "receiver_policy": "any"
+      },
+      "from": {
+        "fact": "mapping_key",
+        "expr": "$arg0.access_path"
+      },
+      "to": {
+        "fact": "mapping_key",
+        "expr": "$return",
+        "access_path": "$return.access_path",
+        "risk_kind": "sql_injection"
+      },
+      "evidence": {
+        "file": "dataset/pymysql/cursors.py",
+        "line": 104,
+        "code": "return {key: conn.literal(val) for (key, val) in args.items()}"
+      },
+      "description": "Preserve dictionary key access-path facts across _escape_args: input mapping keys are preserved in the returned mapping."
+    }
+  ],
+  "risk_upgrades": [],
+  "kill_conditions": [],
+  "validation_expectations": {
+    "must_flow": "finding",
+    "must_not_flow": "no_finding",
+    "must_kill": "no_finding"
+  },
+  "description": "The analyzer is missing access-path propagation for mapping keys flowing into percent-format substitution of SQL queries. Evidence shows: (1) a user-controlled variable key is used as a dictionary key (args = {key: \"safe-value\"}); (2) PyMySQL _escape_args returns a mapping via a dict comprehension that preserves the original keys; and (3) mogrify performs query = query % mapping, where mapping keys drive variable interpolation. This CTPC adds: (a) a dict-literal key capture edge to taint args.keys()[*] from key; (b) a function summary to preserve mapping key facts across _escape_args; and (c) a percent-mapping-key edge to taint the formatted SQL query from the mapping keys. With ordinary assignment/call modeling already present, these repairs connect the source to the sink self._query(query) under the exact structural guards observed.",
+  "notes": [
+    "Top-k structural hints aligned: dict_literal_key (driver:31), return_fact_from_argument/dict comprehension key preservation (_escape_args:104), and percent_mapping_key (mogrify:129).",
+    "No generic or unsupported patterns were used; only mapping-key access-path semantics required for this CVE were added."
+  ]
+}

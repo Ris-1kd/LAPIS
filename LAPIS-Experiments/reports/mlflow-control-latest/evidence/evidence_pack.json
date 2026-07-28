@@ -1,0 +1,1309 @@
+{
+  "case_id": "cve-2023-4033-mlflow",
+  "project": "MLflow",
+  "affected_version": "2.5.0",
+  "vulnerability": "command injection",
+  "baseline_status": {
+    "source_hit": true,
+    "sink_hit": true,
+    "call_context_reachable": true,
+    "complete_taint_path_found": true,
+    "sources_marked": 1,
+    "sinks_matched": 46,
+    "findings": 4,
+    "entrypoints": 1
+  },
+  "source": {
+    "file": "mlflow/models/cli.py",
+    "line": 133,
+    "symbol": "input_path",
+    "expr": "input_path",
+    "path": "/home/ubuntu/llm-yasa-repair/py-bench/cve-2023-4033-mlflow/mlflow/models/cli.py",
+    "observed": "input_path,",
+    "matches_anchor": false
+  },
+  "sink": {
+    "file": "mlflow/utils/process.py",
+    "line": 95,
+    "callee": "subprocess.Popen",
+    "argument": "cmd",
+    "expr": "process = subprocess.Popen(cmd, env=env, text=True, **kwargs)",
+    "path": "/home/ubuntu/llm-yasa-repair/py-bench/cve-2023-4033-mlflow/mlflow/utils/process.py",
+    "observed": "process = subprocess.Popen(",
+    "matches_anchor": false
+  },
+  "source_forward_slice": {
+    "source": "input_path",
+    "reached": [
+      "input_path"
+    ],
+    "frontier": "input_path",
+    "observations": []
+  },
+  "sink_backward_slice": {
+    "sink": "process = subprocess.Popen(cmd, env=env, text=True, **kwargs)",
+    "argument": "cmd",
+    "dependency_chain": [
+      "process = subprocess.Popen(cmd, env=env, text=True, **kwargs)",
+      "cmd"
+    ],
+    "observations": [
+      {
+        "kind": "assignment",
+        "function": "_exec_cmd",
+        "file": "mlflow/utils/process.py",
+        "line": 79,
+        "targets": [
+          "cmd"
+        ],
+        "expr": "cmd = list(map(str, cmd))"
+      },
+      {
+        "kind": "assignment",
+        "function": "_exec_cmd",
+        "file": "mlflow/utils/process.py",
+        "line": 95,
+        "targets": [
+          "process"
+        ],
+        "expr": "process = subprocess.Popen(\n        cmd,\n        env=env,\n        text=True,\n        **kwargs,\n    )"
+      },
+      {
+        "kind": "assignment",
+        "function": "_join_commands",
+        "file": "mlflow/utils/process.py",
+        "line": 122,
+        "targets": [
+          "entry_point"
+        ],
+        "expr": "entry_point = [\"bash\", \"-c\"] if _IS_UNIX else [\"cmd\", \"/c\"]"
+      }
+    ]
+  },
+  "local_structure_evidence": {
+    "dict_literals": [],
+    "calls": [],
+    "assignments": [
+      {
+        "kind": "assignment",
+        "function": "_exec_cmd",
+        "file": "mlflow/utils/process.py",
+        "line": 79,
+        "targets": [
+          "cmd"
+        ],
+        "expr": "cmd = list(map(str, cmd))"
+      },
+      {
+        "kind": "assignment",
+        "function": "_exec_cmd",
+        "file": "mlflow/utils/process.py",
+        "line": 95,
+        "targets": [
+          "process"
+        ],
+        "expr": "process = subprocess.Popen(\n        cmd,\n        env=env,\n        text=True,\n        **kwargs,\n    )"
+      },
+      {
+        "kind": "assignment",
+        "function": "_join_commands",
+        "file": "mlflow/utils/process.py",
+        "line": 122,
+        "targets": [
+          "entry_point"
+        ],
+        "expr": "entry_point = [\"bash\", \"-c\"] if _IS_UNIX else [\"cmd\", \"/c\"]"
+      }
+    ],
+    "dict_comprehensions": [],
+    "format_operations": [],
+    "scoped_function_evidence": {
+      "functions": [
+        {
+          "name": "commands",
+          "file": "mlflow/models/cli.py",
+          "line": 14,
+          "args": []
+        },
+        {
+          "name": "serve",
+          "file": "mlflow/models/cli.py",
+          "line": 34,
+          "args": [
+            "model_uri",
+            "port",
+            "host",
+            "timeout",
+            "workers",
+            "env_manager",
+            "no_conda",
+            "install_mlflow",
+            "enable_mlserver"
+          ]
+        },
+        {
+          "name": "predict",
+          "file": "mlflow/models/cli.py",
+          "line": 131,
+          "args": [
+            "model_uri",
+            "input_path",
+            "output_path",
+            "content_type",
+            "env_manager",
+            "install_mlflow"
+          ]
+        },
+        {
+          "name": "prepare_env",
+          "file": "mlflow/models/cli.py",
+          "line": 159,
+          "args": [
+            "model_uri",
+            "env_manager",
+            "install_mlflow"
+          ]
+        },
+        {
+          "name": "generate_dockerfile",
+          "file": "mlflow/models/cli.py",
+          "line": 187,
+          "args": [
+            "model_uri",
+            "output_directory",
+            "env_manager",
+            "mlflow_home",
+            "install_mlflow",
+            "enable_mlserver"
+          ]
+        },
+        {
+          "name": "build_docker",
+          "file": "mlflow/models/cli.py",
+          "line": 226,
+          "args": [
+            "model_uri",
+            "name",
+            "env_manager",
+            "mlflow_home",
+            "install_mlflow",
+            "enable_mlserver"
+          ]
+        },
+        {
+          "name": "from_completed_process",
+          "file": "mlflow/utils/process.py",
+          "line": 11,
+          "args": [
+            "cls",
+            "process"
+          ]
+        },
+        {
+          "name": "_exec_cmd",
+          "file": "mlflow/utils/process.py",
+          "line": 31,
+          "args": [
+            "cmd"
+          ]
+        },
+        {
+          "name": "_join_commands",
+          "file": "mlflow/utils/process.py",
+          "line": 121,
+          "args": []
+        },
+        {
+          "name": "cache_return_value_per_process",
+          "file": "mlflow/utils/process.py",
+          "line": 131,
+          "args": [
+            "fn"
+          ]
+        },
+        {
+          "name": "wrapped_fn",
+          "file": "mlflow/utils/process.py",
+          "line": 142,
+          "args": []
+        }
+      ],
+      "assignments": [
+        {
+          "function": "serve",
+          "file": "mlflow/models/cli.py",
+          "line": 101,
+          "targets": [
+            "env_manager"
+          ],
+          "expr": "env_manager = _EnvManager.LOCAL"
+        },
+        {
+          "function": "serve",
+          "file": "mlflow/models/cli.py",
+          "line": 103,
+          "targets": [
+            "env_manager"
+          ],
+          "expr": "env_manager = env_manager or _EnvManager.VIRTUALENV"
+        },
+        {
+          "function": "predict",
+          "file": "mlflow/models/cli.py",
+          "line": 144,
+          "targets": [
+            "env_manager"
+          ],
+          "expr": "env_manager = env_manager or _EnvManager.VIRTUALENV"
+        },
+        {
+          "function": "prepare_env",
+          "file": "mlflow/models/cli.py",
+          "line": 169,
+          "targets": [
+            "env_manager"
+          ],
+          "expr": "env_manager = env_manager or _EnvManager.VIRTUALENV"
+        },
+        {
+          "function": "generate_dockerfile",
+          "file": "mlflow/models/cli.py",
+          "line": 200,
+          "targets": [
+            "env_manager"
+          ],
+          "expr": "env_manager = env_manager or _EnvManager.CONDA"
+        },
+        {
+          "function": "generate_dockerfile",
+          "file": "mlflow/models/cli.py",
+          "line": 201,
+          "targets": [
+            "backend"
+          ],
+          "expr": "backend = get_flavor_backend(model_uri, docker_build=True, env_manager=env_manager)"
+        },
+        {
+          "function": "build_docker",
+          "file": "mlflow/models/cli.py",
+          "line": 269,
+          "targets": [
+            "env_manager"
+          ],
+          "expr": "env_manager = env_manager or _EnvManager.VIRTUALENV"
+        },
+        {
+          "function": "from_completed_process",
+          "file": "mlflow/utils/process.py",
+          "line": 12,
+          "targets": [
+            "lines"
+          ],
+          "expr": "lines = [\n            f\"Non-zero exit code: {process.returncode}\",\n            f\"Command: {process.args}\",\n        ]"
+        },
+        {
+          "function": "_exec_cmd",
+          "file": "mlflow/utils/process.py",
+          "line": 60,
+          "targets": [
+            "illegal_kwargs"
+          ],
+          "expr": "illegal_kwargs = set(kwargs.keys()).intersection({\"text\"})"
+        },
+        {
+          "function": "_exec_cmd",
+          "file": "mlflow/utils/process.py",
+          "line": 64,
+          "targets": [
+            "env"
+          ],
+          "expr": "env = kwargs.pop(\"env\", None)"
+        },
+        {
+          "function": "_exec_cmd",
+          "file": "mlflow/utils/process.py",
+          "line": 73,
+          "targets": [
+            "env"
+          ],
+          "expr": "env = env if extra_env is None else {**os.environ, **extra_env}"
+        },
+        {
+          "function": "_exec_cmd",
+          "file": "mlflow/utils/process.py",
+          "line": 79,
+          "targets": [
+            "cmd"
+          ],
+          "expr": "cmd = list(map(str, cmd))"
+        },
+        {
+          "function": "_exec_cmd",
+          "file": "mlflow/utils/process.py",
+          "line": 86,
+          "targets": [
+            "kwargs[\"stdout\"]"
+          ],
+          "expr": "kwargs[\"stdout\"] = subprocess.PIPE"
+        },
+        {
+          "function": "_exec_cmd",
+          "file": "mlflow/utils/process.py",
+          "line": 88,
+          "targets": [
+            "kwargs[\"stderr\"]"
+          ],
+          "expr": "kwargs[\"stderr\"] = subprocess.PIPE"
+        },
+        {
+          "function": "_exec_cmd",
+          "file": "mlflow/utils/process.py",
+          "line": 93,
+          "targets": [
+            "kwargs[\"stderr\"]"
+          ],
+          "expr": "kwargs[\"stderr\"] = subprocess.STDOUT"
+        },
+        {
+          "function": "_exec_cmd",
+          "file": "mlflow/utils/process.py",
+          "line": 95,
+          "targets": [
+            "process"
+          ],
+          "expr": "process = subprocess.Popen(\n        cmd,\n        env=env,\n        text=True,\n        **kwargs,\n    )"
+        },
+        {
+          "function": "_exec_cmd",
+          "file": "mlflow/utils/process.py",
+          "line": 108,
+          "targets": [
+            "stdout, stderr"
+          ],
+          "expr": "stdout, stderr = process.communicate()"
+        },
+        {
+          "function": "_exec_cmd",
+          "file": "mlflow/utils/process.py",
+          "line": 109,
+          "targets": [
+            "returncode"
+          ],
+          "expr": "returncode = process.poll()"
+        },
+        {
+          "function": "_exec_cmd",
+          "file": "mlflow/utils/process.py",
+          "line": 110,
+          "targets": [
+            "comp_process"
+          ],
+          "expr": "comp_process = subprocess.CompletedProcess(\n        process.args,\n        returncode=returncode,\n        stdout=stdout,\n        stderr=stderr,\n    )"
+        },
+        {
+          "function": "_join_commands",
+          "file": "mlflow/utils/process.py",
+          "line": 122,
+          "targets": [
+            "entry_point"
+          ],
+          "expr": "entry_point = [\"bash\", \"-c\"] if _IS_UNIX else [\"cmd\", \"/c\"]"
+        },
+        {
+          "function": "_join_commands",
+          "file": "mlflow/utils/process.py",
+          "line": 123,
+          "targets": [
+            "sep"
+          ],
+          "expr": "sep = \" && \" if _IS_UNIX else \" & \""
+        },
+        {
+          "function": "cache_return_value_per_process",
+          "file": "mlflow/utils/process.py",
+          "line": 149,
+          "targets": [
+            "prev_value, prev_pid"
+          ],
+          "expr": "prev_value, prev_pid = _per_process_value_cache_map.get((fn, args))"
+        },
+        {
+          "function": "wrapped_fn",
+          "file": "mlflow/utils/process.py",
+          "line": 149,
+          "targets": [
+            "prev_value, prev_pid"
+          ],
+          "expr": "prev_value, prev_pid = _per_process_value_cache_map.get((fn, args))"
+        },
+        {
+          "function": "cache_return_value_per_process",
+          "file": "mlflow/utils/process.py",
+          "line": 153,
+          "targets": [
+            "new_value"
+          ],
+          "expr": "new_value = fn(*args)"
+        },
+        {
+          "function": "wrapped_fn",
+          "file": "mlflow/utils/process.py",
+          "line": 153,
+          "targets": [
+            "new_value"
+          ],
+          "expr": "new_value = fn(*args)"
+        },
+        {
+          "function": "cache_return_value_per_process",
+          "file": "mlflow/utils/process.py",
+          "line": 154,
+          "targets": [
+            "new_pid"
+          ],
+          "expr": "new_pid = os.getpid()"
+        },
+        {
+          "function": "wrapped_fn",
+          "file": "mlflow/utils/process.py",
+          "line": 154,
+          "targets": [
+            "new_pid"
+          ],
+          "expr": "new_pid = os.getpid()"
+        },
+        {
+          "function": "cache_return_value_per_process",
+          "file": "mlflow/utils/process.py",
+          "line": 155,
+          "targets": [
+            "_per_process_value_cache_map[(fn, args)]"
+          ],
+          "expr": "_per_process_value_cache_map[(fn, args)] = (new_value, new_pid)"
+        },
+        {
+          "function": "wrapped_fn",
+          "file": "mlflow/utils/process.py",
+          "line": 155,
+          "targets": [
+            "_per_process_value_cache_map[(fn, args)]"
+          ],
+          "expr": "_per_process_value_cache_map[(fn, args)] = (new_value, new_pid)"
+        }
+      ],
+      "returns": [
+        {
+          "function": "serve",
+          "file": "mlflow/models/cli.py",
+          "line": 105,
+          "expr": "return get_flavor_backend(\n        model_uri, env_manager=env_manager, workers=workers, install_mlflow=install_mlflow\n    ).serve(\n        model_uri=model_uri, port=port, host=host, timeout=timeout, enable_mlserver=enable_mlserver\n    )"
+        },
+        {
+          "function": "predict",
+          "file": "mlflow/models/cli.py",
+          "line": 145,
+          "expr": "return get_flavor_backend(\n        model_uri, env_manager=env_manager, install_mlflow=install_mlflow\n    ).predict(\n        model_uri=model_uri,\n        input_path=input_path,\n        output_path=output_path,\n        content_type=content_type,\n    )"
+        },
+        {
+          "function": "prepare_env",
+          "file": "mlflow/models/cli.py",
+          "line": 170,
+          "expr": "return get_flavor_backend(\n        model_uri, env_manager=env_manager, install_mlflow=install_mlflow\n    ).prepare_env(model_uri=model_uri)"
+        },
+        {
+          "function": "from_completed_process",
+          "file": "mlflow/utils/process.py",
+          "line": 28,
+          "expr": "return cls(\"\\n\".join(lines))"
+        },
+        {
+          "function": "_exec_cmd",
+          "file": "mlflow/utils/process.py",
+          "line": 102,
+          "expr": "return process"
+        },
+        {
+          "function": "_exec_cmd",
+          "file": "mlflow/utils/process.py",
+          "line": 118,
+          "expr": "return comp_process"
+        },
+        {
+          "function": "_join_commands",
+          "file": "mlflow/utils/process.py",
+          "line": 124,
+          "expr": "return [*entry_point, sep.join(map(str, commands))]"
+        },
+        {
+          "function": "cache_return_value_per_process",
+          "file": "mlflow/utils/process.py",
+          "line": 151,
+          "expr": "return prev_value"
+        },
+        {
+          "function": "wrapped_fn",
+          "file": "mlflow/utils/process.py",
+          "line": 151,
+          "expr": "return prev_value"
+        },
+        {
+          "function": "cache_return_value_per_process",
+          "file": "mlflow/utils/process.py",
+          "line": 156,
+          "expr": "return new_value"
+        },
+        {
+          "function": "wrapped_fn",
+          "file": "mlflow/utils/process.py",
+          "line": 156,
+          "expr": "return new_value"
+        },
+        {
+          "function": "cache_return_value_per_process",
+          "file": "mlflow/utils/process.py",
+          "line": 158,
+          "expr": "return wrapped_fn"
+        }
+      ],
+      "calls": [
+        {
+          "function": "commands",
+          "function_line": 14,
+          "file": "mlflow/models/cli.py",
+          "line": 13,
+          "callee": "click.group",
+          "args": [
+            "\"models\""
+          ],
+          "expr": "click.group(\"models\")"
+        },
+        {
+          "function": "serve",
+          "function_line": 34,
+          "file": "mlflow/models/cli.py",
+          "line": 24,
+          "callee": "commands.command",
+          "args": [
+            "\"serve\""
+          ],
+          "expr": "commands.command(\"serve\")"
+        },
+        {
+          "function": "serve",
+          "function_line": 34,
+          "file": "mlflow/models/cli.py",
+          "line": 105,
+          "callee": "get_flavor_backend",
+          "args": [
+            "model_uri"
+          ],
+          "expr": "get_flavor_backend(\n        model_uri, env_manager=env_manager, workers=workers, install_mlflow=install_mlflow\n    )"
+        },
+        {
+          "function": "serve",
+          "function_line": 34,
+          "file": "mlflow/models/cli.py",
+          "line": 105,
+          "callee": "get_flavor_backend(...).serve",
+          "args": [],
+          "expr": "get_flavor_backend(\n        model_uri, env_manager=env_manager, workers=workers, install_mlflow=install_mlflow\n    ).serve(\n        model_uri=model_uri, port=port, host=host, timeout=timeout, enable_mlserver=enable_mlserver\n    )"
+        },
+        {
+          "function": "predict",
+          "function_line": 131,
+          "file": "mlflow/models/cli.py",
+          "line": 112,
+          "callee": "commands.command",
+          "args": [
+            "\"predict\""
+          ],
+          "expr": "commands.command(\"predict\")"
+        },
+        {
+          "function": "predict",
+          "function_line": 131,
+          "file": "mlflow/models/cli.py",
+          "line": 114,
+          "callee": "click.option",
+          "args": [
+            "\"--input-path\"",
+            "\"-i\""
+          ],
+          "expr": "click.option(\n    \"--input-path\", \"-i\", default=None, help=\"CSV containing pandas DataFrame to predict against.\"\n)"
+        },
+        {
+          "function": "predict",
+          "function_line": 131,
+          "file": "mlflow/models/cli.py",
+          "line": 117,
+          "callee": "click.option",
+          "args": [
+            "\"--output-path\"",
+            "\"-o\""
+          ],
+          "expr": "click.option(\n    \"--output-path\",\n    \"-o\",\n    default=None,\n    help=\"File to output results to as json file. If not provided, output to stdout.\",\n)"
+        },
+        {
+          "function": "predict",
+          "function_line": 131,
+          "file": "mlflow/models/cli.py",
+          "line": 123,
+          "callee": "click.option",
+          "args": [
+            "\"--content-type\"",
+            "\"-t\""
+          ],
+          "expr": "click.option(\n    \"--content-type\",\n    \"-t\",\n    default=\"json\",\n    help=\"Content type of the input file. Can be one of {'json', 'csv'}.\",\n)"
+        },
+        {
+          "function": "predict",
+          "function_line": 131,
+          "file": "mlflow/models/cli.py",
+          "line": 145,
+          "callee": "get_flavor_backend",
+          "args": [
+            "model_uri"
+          ],
+          "expr": "get_flavor_backend(\n        model_uri, env_manager=env_manager, install_mlflow=install_mlflow\n    )"
+        },
+        {
+          "function": "predict",
+          "function_line": 131,
+          "file": "mlflow/models/cli.py",
+          "line": 145,
+          "callee": "get_flavor_backend(...).predict",
+          "args": [],
+          "expr": "get_flavor_backend(\n        model_uri, env_manager=env_manager, install_mlflow=install_mlflow\n    ).predict(\n        model_uri=model_uri,\n        input_path=input_path,\n        output_path=output_path,\n        content_type=content_type,\n    )"
+        },
+        {
+          "function": "prepare_env",
+          "function_line": 159,
+          "file": "mlflow/models/cli.py",
+          "line": 155,
+          "callee": "commands.command",
+          "args": [
+            "\"prepare-env\""
+          ],
+          "expr": "commands.command(\"prepare-env\")"
+        },
+        {
+          "function": "prepare_env",
+          "function_line": 159,
+          "file": "mlflow/models/cli.py",
+          "line": 170,
+          "callee": "get_flavor_backend",
+          "args": [
+            "model_uri"
+          ],
+          "expr": "get_flavor_backend(\n        model_uri, env_manager=env_manager, install_mlflow=install_mlflow\n    )"
+        },
+        {
+          "function": "prepare_env",
+          "function_line": 159,
+          "file": "mlflow/models/cli.py",
+          "line": 170,
+          "callee": "get_flavor_backend(...).prepare_env",
+          "args": [],
+          "expr": "get_flavor_backend(\n        model_uri, env_manager=env_manager, install_mlflow=install_mlflow\n    ).prepare_env(model_uri=model_uri)"
+        },
+        {
+          "function": "generate_dockerfile",
+          "function_line": 187,
+          "file": "mlflow/models/cli.py",
+          "line": 175,
+          "callee": "commands.command",
+          "args": [
+            "\"generate-dockerfile\""
+          ],
+          "expr": "commands.command(\"generate-dockerfile\")"
+        },
+        {
+          "function": "generate_dockerfile",
+          "function_line": 187,
+          "file": "mlflow/models/cli.py",
+          "line": 177,
+          "callee": "click.option",
+          "args": [
+            "\"--output-directory\"",
+            "\"-d\""
+          ],
+          "expr": "click.option(\n    \"--output-directory\",\n    \"-d\",\n    default=\"mlflow-dockerfile\",\n    help=\"Output directory where the generated Dockerfile is stored.\",\n)"
+        },
+        {
+          "function": "generate_dockerfile",
+          "function_line": 187,
+          "file": "mlflow/models/cli.py",
+          "line": 197,
+          "callee": "_logger.info",
+          "args": [
+            "\"Generating Dockerfile for model %s\"",
+            "model_uri"
+          ],
+          "expr": "_logger.info(\"Generating Dockerfile for model %s\", model_uri)"
+        },
+        {
+          "function": "generate_dockerfile",
+          "function_line": 187,
+          "file": "mlflow/models/cli.py",
+          "line": 199,
+          "callee": "_logger.info",
+          "args": [
+            "\"Generating Dockerfile\""
+          ],
+          "expr": "_logger.info(\"Generating Dockerfile\")"
+        },
+        {
+          "function": "generate_dockerfile",
+          "function_line": 187,
+          "file": "mlflow/models/cli.py",
+          "line": 201,
+          "callee": "get_flavor_backend",
+          "args": [
+            "model_uri"
+          ],
+          "expr": "get_flavor_backend(model_uri, docker_build=True, env_manager=env_manager)"
+        },
+        {
+          "function": "generate_dockerfile",
+          "function_line": 187,
+          "file": "mlflow/models/cli.py",
+          "line": 202,
+          "callee": "backend.can_build_image",
+          "args": [],
+          "expr": "backend.can_build_image()"
+        },
+        {
+          "function": "generate_dockerfile",
+          "function_line": 187,
+          "file": "mlflow/models/cli.py",
+          "line": 203,
+          "callee": "backend.generate_dockerfile",
+          "args": [
+            "model_uri",
+            "output_directory"
+          ],
+          "expr": "backend.generate_dockerfile(\n            model_uri,\n            output_directory,\n            mlflow_home=mlflow_home,\n            install_mlflow=install_mlflow,\n            enable_mlserver=enable_mlserver,\n        )"
+        },
+        {
+          "function": "generate_dockerfile",
+          "function_line": 187,
+          "file": "mlflow/models/cli.py",
+          "line": 210,
+          "callee": "_logger.info",
+          "args": [
+            "\"Generated Dockerfile in directory %s\"",
+            "output_directory"
+          ],
+          "expr": "_logger.info(\"Generated Dockerfile in directory %s\", output_directory)"
+        },
+        {
+          "function": "generate_dockerfile",
+          "function_line": 187,
+          "file": "mlflow/models/cli.py",
+          "line": 212,
+          "callee": "_logger.error",
+          "args": [
+            "\"Cannot build docker image for selected backend\""
+          ],
+          "expr": "_logger.error(\n            \"Cannot build docker image for selected backend\",\n            extra={\"backend\": backend.__class__.__name__},\n        )"
+        },
+        {
+          "function": "generate_dockerfile",
+          "function_line": 187,
+          "file": "mlflow/models/cli.py",
+          "line": 216,
+          "callee": "NotImplementedError",
+          "args": [
+            "\"Cannot build docker image for selected backend\""
+          ],
+          "expr": "NotImplementedError(\"Cannot build docker image for selected backend\")"
+        },
+        {
+          "function": "build_docker",
+          "function_line": 226,
+          "file": "mlflow/models/cli.py",
+          "line": 219,
+          "callee": "commands.command",
+          "args": [
+            "\"build-docker\""
+          ],
+          "expr": "commands.command(\"build-docker\")"
+        },
+        {
+          "function": "build_docker",
+          "function_line": 226,
+          "file": "mlflow/models/cli.py",
+          "line": 221,
+          "callee": "click.option",
+          "args": [
+            "\"--name\"",
+            "\"-n\""
+          ],
+          "expr": "click.option(\"--name\", \"-n\", default=\"mlflow-pyfunc-servable\", help=\"Name to use for built image\")"
+        },
+        {
+          "function": "build_docker",
+          "function_line": 226,
+          "file": "mlflow/models/cli.py",
+          "line": 270,
+          "callee": "build_docker_api",
+          "args": [
+            "model_uri",
+            "name"
+          ],
+          "expr": "build_docker_api(\n        model_uri,\n        name,\n        env_manager=env_manager,\n        mlflow_home=mlflow_home,\n        install_mlflow=install_mlflow,\n        enable_mlserver=enable_mlserver,\n    )"
+        },
+        {
+          "function": "from_completed_process",
+          "function_line": 11,
+          "file": "mlflow/utils/process.py",
+          "line": 28,
+          "callee": "cls",
+          "args": [
+            "\"\\n\".join(lines)"
+          ],
+          "expr": "cls(\"\\n\".join(lines))"
+        },
+        {
+          "function": "from_completed_process",
+          "function_line": 11,
+          "file": "mlflow/utils/process.py",
+          "line": 28,
+          "callee": "join",
+          "args": [
+            "lines"
+          ],
+          "expr": "\"\\n\".join(lines)"
+        },
+        {
+          "function": "_exec_cmd",
+          "function_line": 31,
+          "file": "mlflow/utils/process.py",
+          "line": 60,
+          "callee": "kwargs.keys",
+          "args": [],
+          "expr": "kwargs.keys()"
+        },
+        {
+          "function": "_exec_cmd",
+          "function_line": 31,
+          "file": "mlflow/utils/process.py",
+          "line": 60,
+          "callee": "set",
+          "args": [
+            "kwargs.keys()"
+          ],
+          "expr": "set(kwargs.keys())"
+        },
+        {
+          "function": "_exec_cmd",
+          "function_line": 31,
+          "file": "mlflow/utils/process.py",
+          "line": 60,
+          "callee": "set(...).intersection",
+          "args": [
+            "{\"text\"}"
+          ],
+          "expr": "set(kwargs.keys()).intersection({\"text\"})"
+        },
+        {
+          "function": "_exec_cmd",
+          "function_line": 31,
+          "file": "mlflow/utils/process.py",
+          "line": 62,
+          "callee": "ValueError",
+          "args": [
+            "f\"`kwargs` cannot contain {list(illegal_kwargs)}\""
+          ],
+          "expr": "ValueError(f\"`kwargs` cannot contain {list(illegal_kwargs)}\")"
+        },
+        {
+          "function": "_exec_cmd",
+          "function_line": 31,
+          "file": "mlflow/utils/process.py",
+          "line": 62,
+          "callee": "list",
+          "args": [
+            "illegal_kwargs"
+          ],
+          "expr": "list(illegal_kwargs)"
+        },
+        {
+          "function": "_exec_cmd",
+          "function_line": 31,
+          "file": "mlflow/utils/process.py",
+          "line": 64,
+          "callee": "kwargs.pop",
+          "args": [
+            "\"env\"",
+            "None"
+          ],
+          "expr": "kwargs.pop(\"env\", None)"
+        },
+        {
+          "function": "_exec_cmd",
+          "function_line": 31,
+          "file": "mlflow/utils/process.py",
+          "line": 66,
+          "callee": "ValueError",
+          "args": [
+            "\"`extra_env` and `env` cannot be used at the same time\""
+          ],
+          "expr": "ValueError(\"`extra_env` and `env` cannot be used at the same time\")"
+        },
+        {
+          "function": "_exec_cmd",
+          "function_line": 31,
+          "file": "mlflow/utils/process.py",
+          "line": 69,
+          "callee": "ValueError",
+          "args": [
+            "\"`capture_output=True` and `stream_output=True` cannot be specified at the same time\""
+          ],
+          "expr": "ValueError(\n            \"`capture_output=True` and `stream_output=True` cannot be specified at the same time\"\n        )"
+        },
+        {
+          "function": "_exec_cmd",
+          "function_line": 31,
+          "file": "mlflow/utils/process.py",
+          "line": 78,
+          "callee": "isinstance",
+          "args": [
+            "cmd",
+            "list"
+          ],
+          "expr": "isinstance(cmd, list)"
+        },
+        {
+          "function": "_exec_cmd",
+          "function_line": 31,
+          "file": "mlflow/utils/process.py",
+          "line": 79,
+          "callee": "list",
+          "args": [
+            "map(str, cmd)"
+          ],
+          "expr": "list(map(str, cmd))"
+        },
+        {
+          "function": "_exec_cmd",
+          "function_line": 31,
+          "file": "mlflow/utils/process.py",
+          "line": 79,
+          "callee": "map",
+          "args": [
+            "str",
+            "cmd"
+          ],
+          "expr": "map(str, cmd)"
+        },
+        {
+          "function": "_exec_cmd",
+          "function_line": 31,
+          "file": "mlflow/utils/process.py",
+          "line": 82,
+          "callee": "kwargs.get",
+          "args": [
+            "\"stdout\""
+          ],
+          "expr": "kwargs.get(\"stdout\")"
+        },
+        {
+          "function": "_exec_cmd",
+          "function_line": 31,
+          "file": "mlflow/utils/process.py",
+          "line": 82,
+          "callee": "kwargs.get",
+          "args": [
+            "\"stderr\""
+          ],
+          "expr": "kwargs.get(\"stderr\")"
+        },
+        {
+          "function": "_exec_cmd",
+          "function_line": 31,
+          "file": "mlflow/utils/process.py",
+          "line": 83,
+          "callee": "ValueError",
+          "args": [
+            "\"stdout and stderr arguments may not be used with capture_output or stream_output\""
+          ],
+          "expr": "ValueError(\n                \"stdout and stderr arguments may not be used with capture_output or stream_output\"\n            )"
+        },
+        {
+          "function": "_exec_cmd",
+          "function_line": 31,
+          "file": "mlflow/utils/process.py",
+          "line": 95,
+          "callee": "subprocess.Popen",
+          "args": [
+            "cmd"
+          ],
+          "expr": "subprocess.Popen(\n        cmd,\n        env=env,\n        text=True,\n        **kwargs,\n    )"
+        },
+        {
+          "function": "_exec_cmd",
+          "function_line": 31,
+          "file": "mlflow/utils/process.py",
+          "line": 105,
+          "callee": "iter",
+          "args": [
+            "lambda: process.stdout.read(1)",
+            "\"\""
+          ],
+          "expr": "iter(lambda: process.stdout.read(1), \"\")"
+        },
+        {
+          "function": "_exec_cmd",
+          "function_line": 31,
+          "file": "mlflow/utils/process.py",
+          "line": 105,
+          "callee": "process.stdout.read",
+          "args": [
+            "1"
+          ],
+          "expr": "process.stdout.read(1)"
+        },
+        {
+          "function": "_exec_cmd",
+          "function_line": 31,
+          "file": "mlflow/utils/process.py",
+          "line": 106,
+          "callee": "sys.stdout.write",
+          "args": [
+            "output_char"
+          ],
+          "expr": "sys.stdout.write(output_char)"
+        },
+        {
+          "function": "_exec_cmd",
+          "function_line": 31,
+          "file": "mlflow/utils/process.py",
+          "line": 108,
+          "callee": "process.communicate",
+          "args": [],
+          "expr": "process.communicate()"
+        },
+        {
+          "function": "_exec_cmd",
+          "function_line": 31,
+          "file": "mlflow/utils/process.py",
+          "line": 109,
+          "callee": "process.poll",
+          "args": [],
+          "expr": "process.poll()"
+        },
+        {
+          "function": "_exec_cmd",
+          "function_line": 31,
+          "file": "mlflow/utils/process.py",
+          "line": 110,
+          "callee": "subprocess.CompletedProcess",
+          "args": [
+            "process.args"
+          ],
+          "expr": "subprocess.CompletedProcess(\n        process.args,\n        returncode=returncode,\n        stdout=stdout,\n        stderr=stderr,\n    )"
+        },
+        {
+          "function": "_exec_cmd",
+          "function_line": 31,
+          "file": "mlflow/utils/process.py",
+          "line": 117,
+          "callee": "ShellCommandException.from_completed_process",
+          "args": [
+            "comp_process"
+          ],
+          "expr": "ShellCommandException.from_completed_process(comp_process)"
+        },
+        {
+          "function": "_join_commands",
+          "function_line": 121,
+          "file": "mlflow/utils/process.py",
+          "line": 124,
+          "callee": "map",
+          "args": [
+            "str",
+            "commands"
+          ],
+          "expr": "map(str, commands)"
+        },
+        {
+          "function": "_join_commands",
+          "function_line": 121,
+          "file": "mlflow/utils/process.py",
+          "line": 124,
+          "callee": "sep.join",
+          "args": [
+            "map(str, commands)"
+          ],
+          "expr": "sep.join(map(str, commands))"
+        },
+        {
+          "function": "cache_return_value_per_process",
+          "function_line": 131,
+          "file": "mlflow/utils/process.py",
+          "line": 141,
+          "callee": "functools.wraps",
+          "args": [
+            "fn"
+          ],
+          "expr": "functools.wraps(fn)"
+        },
+        {
+          "function": "wrapped_fn",
+          "function_line": 142,
+          "file": "mlflow/utils/process.py",
+          "line": 141,
+          "callee": "functools.wraps",
+          "args": [
+            "fn"
+          ],
+          "expr": "functools.wraps(fn)"
+        },
+        {
+          "function": "cache_return_value_per_process",
+          "function_line": 131,
+          "file": "mlflow/utils/process.py",
+          "line": 143,
+          "callee": "len",
+          "args": [
+            "kwargs"
+          ],
+          "expr": "len(kwargs)"
+        },
+        {
+          "function": "wrapped_fn",
+          "function_line": 142,
+          "file": "mlflow/utils/process.py",
+          "line": 143,
+          "callee": "len",
+          "args": [
+            "kwargs"
+          ],
+          "expr": "len(kwargs)"
+        },
+        {
+          "function": "cache_return_value_per_process",
+          "function_line": 131,
+          "file": "mlflow/utils/process.py",
+          "line": 144,
+          "callee": "ValueError",
+          "args": [
+            "\"The function decorated by `cache_return_value_per_process` is not allowed to be \"\n                \"called with key-word style arguments.\""
+          ],
+          "expr": "ValueError(\n                \"The function decorated by `cache_return_value_per_process` is not allowed to be \"\n                \"called with key-word style arguments.\"\n            )"
+        },
+        {
+          "function": "wrapped_fn",
+          "function_line": 142,
+          "file": "mlflow/utils/process.py",
+          "line": 144,
+          "callee": "ValueError",
+          "args": [
+            "\"The function decorated by `cache_return_value_per_process` is not allowed to be \"\n                \"called with key-word style arguments.\""
+          ],
+          "expr": "ValueError(\n                \"The function decorated by `cache_return_value_per_process` is not allowed to be \"\n                \"called with key-word style arguments.\"\n            )"
+        },
+        {
+          "function": "cache_return_value_per_process",
+          "function_line": 131,
+          "file": "mlflow/utils/process.py",
+          "line": 149,
+          "callee": "_per_process_value_cache_map.get",
+          "args": [
+            "(fn, args)"
+          ],
+          "expr": "_per_process_value_cache_map.get((fn, args))"
+        },
+        {
+          "function": "wrapped_fn",
+          "function_line": 142,
+          "file": "mlflow/utils/process.py",
+          "line": 149,
+          "callee": "_per_process_value_cache_map.get",
+          "args": [
+            "(fn, args)"
+          ],
+          "expr": "_per_process_value_cache_map.get((fn, args))"
+        },
+        {
+          "function": "cache_return_value_per_process",
+          "function_line": 131,
+          "file": "mlflow/utils/process.py",
+          "line": 150,
+          "callee": "os.getpid",
+          "args": [],
+          "expr": "os.getpid()"
+        },
+        {
+          "function": "wrapped_fn",
+          "function_line": 142,
+          "file": "mlflow/utils/process.py",
+          "line": 150,
+          "callee": "os.getpid",
+          "args": [],
+          "expr": "os.getpid()"
+        },
+        {
+          "function": "cache_return_value_per_process",
+          "function_line": 131,
+          "file": "mlflow/utils/process.py",
+          "line": 153,
+          "callee": "fn",
+          "args": [
+            "*args"
+          ],
+          "expr": "fn(*args)"
+        },
+        {
+          "function": "wrapped_fn",
+          "function_line": 142,
+          "file": "mlflow/utils/process.py",
+          "line": 153,
+          "callee": "fn",
+          "args": [
+            "*args"
+          ],
+          "expr": "fn(*args)"
+        },
+        {
+          "function": "cache_return_value_per_process",
+          "function_line": 131,
+          "file": "mlflow/utils/process.py",
+          "line": 154,
+          "callee": "os.getpid",
+          "args": [],
+          "expr": "os.getpid()"
+        },
+        {
+          "function": "wrapped_fn",
+          "function_line": 142,
+          "file": "mlflow/utils/process.py",
+          "line": 154,
+          "callee": "os.getpid",
+          "args": [],
+          "expr": "os.getpid()"
+        }
+      ],
+      "dict_comprehensions": [],
+      "percent_operations": []
+    },
+    "connectivity_candidates": []
+  },
+  "local_convergence": {
+    "object": null,
+    "access_path": null,
+    "source_frontier": "input_path",
+    "sink_dependency_node": null,
+    "is_converged": false
+  },
+  "candidate_edges": [],
+  "top_k_edges": [],
+  "verdict": {
+    "is_access_path_gap_candidate": false,
+    "gap_type": [
+      "access-path propagation"
+    ],
+    "summary": "Source and final sink are both observed by baseline YASA, but no taint finding is produced. Candidate CTPC obligations are derived from local static structure."
+  }
+}

@@ -299,6 +299,22 @@ class TaintOutputStrategy extends OutputStrategy {
           locations.push(
             prepareLocation(0, 0, 0, 0, 'egg controller', item.str, item.node?._meta?.nodehash, affectedNodeName)
           )
+        } else if (item.file && item.line) {
+          const line = Array.isArray(item.line) ? item.line[0] : item.line
+          const code = item.code || item.affectedNodeName || ''
+          const snippetText = `${item.file}\n  AffectedNodeName: ${affectedNodeName || ''}\n  ${line}:  ${item.tag || ''}     ${code}\n`
+          locations.push(
+            prepareLocation(
+              line,
+              1,
+              line,
+              Math.max(1, String(code).length + 1),
+              FindingUtil.sourceFileURI(item.file || finding.sourcefile),
+              snippetText,
+              undefined,
+              affectedNodeName
+            )
+          )
         }
       })
       const trace = prepareTrace(locations)

@@ -1,0 +1,139 @@
+{
+  "runner": "yasa",
+  "scope": "full-cve",
+  "label": "baseline",
+  "case_id": "cve-2025-55156-pyload",
+  "tool_dir": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Tool",
+  "case_path": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/mixed_case/cve-2025-55156-pyload/case.json",
+  "source_path": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/benchmarks/mixed_case/cve-2025-55156-pyload",
+  "rule_file": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/mixed_case/cve-2025-55156-pyload/rules/final-sink-only.json",
+  "uast_sdk_path": "/home/ubuntu/llm-yasa-repair/YASA-Engine-upstream/uast4py-linux-amd64",
+  "ctpc_file": null,
+  "ccec_file": null,
+  "checker_ids": "taint_flow_python_input_inner",
+  "dump_cg": false,
+  "status": "not_reported",
+  "result": "no_finding",
+  "returncode": 0,
+  "report_dir": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/pyload-llm-auto-mixed-latest/runs/baseline/baseline",
+  "summary": {
+    "projectName": "cve-2025-55156-pyload",
+    "projectPath": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/benchmarks/mixed_case/cve-2025-55156-pyload/",
+    "yasaVersion": "0.3.1",
+    "parallelWorkers": 1,
+    "cgAlgorithm": "DEFAULT",
+    "dumpAllCG": false,
+    "dumpAST": false,
+    "scanStartTime": "2026-07-28T07:06:40.412Z",
+    "scanEndTime": "2026-07-28T07:07:51.855Z",
+    "findingCount": 0,
+    "language": "python",
+    "fileCount": 570,
+    "lineCount": 61479,
+    "totalTimeMs": 71443,
+    "markedSourceCount": 2,
+    "matchedSinkCount": 0,
+    "entryPointCount": 1,
+    "parseMs": 70368,
+    "parseCodeMs": 44234,
+    "preloadMs": 216,
+    "processModuleMs": 25768,
+    "startAnalyzeMs": 605,
+    "symbolInterpretMs": 14,
+    "execCount": 143673,
+    "execInstCount": 47416,
+    "avgExecTimePerInst": 0,
+    "avgInstExecCount": 3.030053146617176,
+    "execTimeP70Ms": 0,
+    "execTimeP99Ms": 0,
+    "execTimeP100Ms": 0,
+    "execTimesP70": 2,
+    "execTimesP99": 32,
+    "execTimesP100": 656,
+    "ruleConfig": [
+      {
+        "checkerIds": [
+          "taint_flow_python_input_inner"
+        ],
+        "sources": {
+          "TaintSource": [
+            {
+              "path": "url",
+              "scopeFile": "poc/poc_cve_2025_55156_pyload.py",
+              "scopeFunc": "cve_2025_55156_driver",
+              "locStart": 15,
+              "locEnd": 18
+            }
+          ]
+        },
+        "sinks": {
+          "FuncCallTaintSink": [
+            {
+              "args": [
+                "0"
+              ],
+              "attribute": "CVE-2025-55156-pyload-sql-injection",
+              "fsig": "self.c.execute"
+            }
+          ]
+        },
+        "entrypoints": [
+          {
+            "filePath": "/poc/poc_cve_2025_55156_pyload.py",
+            "functionName": "cve_2025_55156_driver",
+            "attribute": "poc-cve-2025-55156-final-sink-only"
+          }
+        ],
+        "outputAtTaint": {
+          "traceStrategy": "full"
+        }
+      }
+    ]
+  },
+  "trace_quality": {
+    "findingCount": 0,
+    "ccecVirtualSink": false,
+    "ctpcVirtualSink": false,
+    "factTraceGap": false,
+    "ctpcFactTrace": false,
+    "actualSourceToBoundaryTrace": false,
+    "traceStatus": "no_finding_trace",
+    "needsCtpc": false,
+    "needsTraceReview": false,
+    "decisionBasis": "Derived from SARIF sinkAttribute and trace labels. A CCEC finding with FACT TRACE GAP means callgraph repair reached the virtual sink but source-to-boundary taint propagation is still open."
+  },
+  "run": {
+    "command": [
+      "timeout",
+      "180s",
+      "npx",
+      "tsx",
+      "src/main.ts",
+      "--sourcePath",
+      "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/benchmarks/mixed_case/cve-2025-55156-pyload",
+      "--language",
+      "python",
+      "--report",
+      "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/pyload-llm-auto-mixed-latest/runs/baseline/baseline",
+      "--ruleConfigFile",
+      "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/mixed_case/cve-2025-55156-pyload/rules/final-sink-only.json",
+      "--checkerIds",
+      "taint_flow_python_input_inner",
+      "--entrypointMode",
+      "ONLY_CUSTOM",
+      "--workerCount",
+      "1",
+      "--incremental",
+      "false",
+      "--taintTraceOutputStrategy",
+      "full",
+      "--uastSDKPath",
+      "/home/ubuntu/llm-yasa-repair/YASA-Engine-upstream/uast4py-linux-amd64"
+    ],
+    "cwd": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Tool",
+    "returncode": 0,
+    "stdout_tail": "[YASA] Begin execution\n[YASA][init] Using rule config file: /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/mixed_case/cve-2025-55156-pyload/rules/final-sink-only.json\n[YASA][init] Specified checker IDs: [taint_flow_python_input_inner]\n[YASA][init] EntrypointMode set: ONLY_CUSTOM\nversion: 0.3.1\nv8 heap_size_limit: 2096 MB\nmain file:/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Tool/src/main.ts\n[YASA][init] Source path: /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/benchmarks/mixed_case/cve-2025-55156-pyload/\n[YASA][init] Report directory: /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/pyload-llm-auto-mixed-latest/runs/baseline/baseline\n[YASA][init] Analysis language: python\n[YASA][init] Analysis analyzer: PythonAnalyzer\n[YASA][init] Loading checker: taint_flow_python_input_inner from /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Tool/src/checker/taint/python/python-taint-checker.ts\n[YASA][init] Successfully loaded 1 checker(s): [taint_flow_python_input_inner]\n[YASA] Executing preProcess\n[YASA][preProcess] Executing parseCode\n[python-ast-builder] parsePackage error: get python ast failed. /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/benchmarks/mixed_case/cve-2025-55156-pyload/\n[YASA][preProcess] Completed parseCode, cost: 44234ms, heap: 272.65/299.93 MB, rss: 386.68 MB, arrayBuffers: 0.05 MB\n[YASA][preProcess] Executing preload\n[YASA][preProcess] Completed preload, cost: 216ms, heap: 264.8/301.38 MB, rss: 388.57 MB, arrayBuffers: 0.05 MB\n[YASA][preProcess] Executing processModule\n[YASA][preProcess] Completed processModule, cost: 25768ms, heap: 493.28/524.25 MB, rss: 620.52 MB, arrayBuffers: 0.05 MB\n[YASA] Completed preProcess, cost: 70368ms, heap: 493.29/524.25 MB, rss: 620.52 MB, arrayBuffers: 0.05 MB\n[YASA] Executing startAnalyze\n[YASA] Completed startAnalyze, cost: 605ms, heap: 505.53/540.88 MB, rss: 636.36 MB, arrayBuffers: 0.05 MB\n[YASA] Executing symbolInterpret\nEntryPoint [/poc/poc_cve_2025_55156_pyload.cve_2025_55156_driver] is executing\n[YASA] Completed symbolInterpret, cost: 14ms, heap: 506.14/540.88 MB, rss: 636.36 MB, arrayBuffers: 0.05 MB\nFound 4 potential output strategy files\nRegistered strategy: callchain from callchain-output-strategy.ts\nRegistered strategy: callgraph from callgraph-output-strategy.ts\nRegistered strategy: interactive from interactive-output-strategy.ts\nRegistered strategy: taintflow from taint-output-strategy.ts\nSuccessfully registered 4 output strategies\n\n=======================  outputFindings  =======================\n================================================================\n\nanalyze done\n[YASA] Execution completed, cost: 71443ms, heap: 516.79/544.54 MB, rss: 640.14 MB, arrayBuffers: 0.08 MB\n\n======================  Analysis Overview  =====================\nLanguage                           : python\nFiles analyzed                     : 570\nLines of code                      : 61,479\nTotal time                         : 1m11s415ms\nExecuted instruction               : 47416\nExecution count                    : 143673\nSources marked                     : 2\nSinks matched                      : 0\nValid entrypoints                  : 1\nFindings                           : 0\nAvg execution time per instruction : 0.00ms\nAvg instruction execution count    : 3.03\nExecution time 70%/99%/100%        : 0.00ms/0.00ms/0.00ms\nExecution times 70%/99%/100%       : 2.00/32.00/656.00\n================================================================\n\n\n===================  Performance Statistics  ===================\ntotal cost: 1m11s443ms\npreProcess cost: 1m10s368ms (98.5%)\n  parseCode cost: 44s234ms (62.9%)\n  preload cost: 0s216ms (0.3%)\n  processModule cost: 25s768ms (36.6%)\n  other cost: 0s150ms (0.2%)\nstartAnalyze cost: 0s605ms (0.8%)\nsymbolInterpret cost: 0s14ms (0.0%)\nother cost: 0s456ms (0.6%)\n================================================================\n\n",
+    "stderr_tail": ""
+  },
+  "interpretation": "This is a full original-CVE run. A finding here is evidence that the enhanced analyzer connected the case entrypoint, interprocedural execution context, CTPC access-path facts, and final sink rule on the original dataset."
+}

@@ -24,6 +24,7 @@ DEFAULT_LLM_BASE_URLS = (DEFAULT_LLM_BASE_URL, *FALLBACK_LLM_BASE_URLS)
 DEFAULT_LLM_MODEL = "gpt-5"
 SUPPORTED_LLM_MODELS = (DEFAULT_LLM_MODEL,)
 DOH_RESOLVER_IPS = ("8.8.8.8", "1.1.1.1")
+LOCAL_LLM_ENV_FILE = ".lapis-llm.env"
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,42 @@ class LLMConfig:
     max_tokens: int = 4096
 
 
+def _parse_env_file(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return values
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key:
+            values[key] = value
+    return values
+
+
+def _find_local_llm_env_file() -> Path | None:
+    configured = os.environ.get("LAPIS_LLM_ENV_FILE")
+    if configured:
+        path = Path(configured).expanduser()
+        return path if path.exists() else None
+    for base in [Path.cwd(), *Path.cwd().parents]:
+        path = base / LOCAL_LLM_ENV_FILE
+        if path.exists():
+            return path
+    home_path = Path.home() / LOCAL_LLM_ENV_FILE
+    return home_path if home_path.exists() else None
+
+
+def _local_llm_env() -> dict[str, str]:
+    path = _find_local_llm_env_file()
+    return _parse_env_file(path) if path else {}
+
+
 def config_from_env(
     *,
     api_key: str | None = None,
@@ -45,16 +82,23 @@ def config_from_env(
     temperature: float = 0.0,
     max_tokens: int = 4096,
 ) -> LLMConfig:
-    key = api_key or os.environ.get("LAPIS_LLM_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    local_env = _local_llm_env()
+    key = (
+        api_key
+        or os.environ.get("LAPIS_LLM_API_KEY")
+        or os.environ.get("OPENAI_API_KEY")
+        or local_env.get("LAPIS_LLM_API_KEY")
+        or local_env.get("OPENAI_API_KEY")
+    )
     if not key:
-        raise ValueError("set LAPIS_LLM_API_KEY or OPENAI_API_KEY")
-    selected_model = model or os.environ.get("LAPIS_LLM_MODEL") or DEFAULT_LLM_MODEL
+        raise ValueError("set LAPIS_LLM_API_KEY or OPENAI_API_KEY, or create .lapis-llm.env")
+    selected_model = model or os.environ.get("LAPIS_LLM_MODEL") or local_env.get("LAPIS_LLM_MODEL") or DEFAULT_LLM_MODEL
     if selected_model not in SUPPORTED_LLM_MODELS:
         supported = ", ".join(SUPPORTED_LLM_MODELS)
         raise ValueError(f"unsupported LAPIS LLM model {selected_model!r}; choose one of: {supported}")
     return LLMConfig(
         api_key=key,
-        base_url=(base_url or os.environ.get("LAPIS_LLM_BASE_URL") or DEFAULT_LLM_BASE_URL).rstrip("/"),
+        base_url=(base_url or os.environ.get("LAPIS_LLM_BASE_URL") or local_env.get("LAPIS_LLM_BASE_URL") or DEFAULT_LLM_BASE_URL).rstrip("/"),
         model=selected_model,
         timeout_seconds=timeout_seconds,
         temperature=temperature,

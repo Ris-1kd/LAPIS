@@ -1,0 +1,173 @@
+{
+  "ctpc": "LAPIS/LAPIS-Experiments/reports/pymysql-llm-auto-ctpc-latest/ctpc/ctpc/ctpc.json",
+  "validation_dir": "LAPIS/LAPIS-Experiments/reports/pymysql-llm-auto-ctpc-latest/validation/validation",
+  "status": "accepted",
+  "sample_results": [
+    {
+      "sample": "must-flow",
+      "expected": "finding",
+      "predicted": "finding",
+      "passed": true,
+      "syntax_ok": true,
+      "syntax_error": null,
+      "features": {
+        "source_hit": true,
+        "sink_hit": true,
+        "tainted_names": [
+          "key"
+        ],
+        "dict_vars_with_tainted_key": [
+          "args"
+        ],
+        "dict_vars_with_tainted_value": [],
+        "escaped_vars_preserving_keys": [],
+        "formatted_query_vars": [
+          "query"
+        ],
+        "filesystem_path_vars": [],
+        "filesystem_sink_hit": false,
+        "filesystem_features": {
+          "constructor_keyword_capture": false,
+          "file_name_split": false,
+          "file_attrs_assigned": false,
+          "fname_from_file_attrs": false,
+          "path_join_with_fname": false,
+          "open_path": false
+        },
+        "kill_guard": false
+      },
+      "evidence": [
+        {
+          "kind": "source_assignment",
+          "line": 40,
+          "expr": "key = cve_2024_36039_source()"
+        },
+        {
+          "kind": "tainted_dict_key",
+          "line": 42,
+          "expr": "args = {key: \"safe-value\"}"
+        },
+        {
+          "kind": "percent_format_mapping_key",
+          "line": 26,
+          "expr": "query = query % self._escape_args(args, conn)"
+        }
+      ]
+    },
+    {
+      "sample": "must-not-flow",
+      "expected": "no_finding",
+      "predicted": "no_finding",
+      "passed": true,
+      "syntax_ok": true,
+      "syntax_error": null,
+      "features": {
+        "source_hit": true,
+        "sink_hit": true,
+        "tainted_names": [
+          "user"
+        ],
+        "dict_vars_with_tainted_key": [],
+        "dict_vars_with_tainted_value": [
+          "args"
+        ],
+        "escaped_vars_preserving_keys": [],
+        "formatted_query_vars": [],
+        "filesystem_path_vars": [],
+        "filesystem_sink_hit": false,
+        "filesystem_features": {
+          "constructor_keyword_capture": false,
+          "file_name_split": false,
+          "file_attrs_assigned": false,
+          "fname_from_file_attrs": false,
+          "path_join_with_fname": false,
+          "open_path": false
+        },
+        "kill_guard": false
+      },
+      "evidence": [
+        {
+          "kind": "source_assignment",
+          "line": 38,
+          "expr": "user = cve_2024_36039_source()"
+        },
+        {
+          "kind": "tainted_dict_value",
+          "line": 40,
+          "expr": "args = {\"name\": user}"
+        }
+      ]
+    },
+    {
+      "sample": "must-kill",
+      "expected": "no_finding",
+      "predicted": "no_finding",
+      "passed": true,
+      "syntax_ok": true,
+      "syntax_error": null,
+      "features": {
+        "source_hit": true,
+        "sink_hit": true,
+        "tainted_names": [
+          "user_key"
+        ],
+        "dict_vars_with_tainted_key": [],
+        "dict_vars_with_tainted_value": [],
+        "escaped_vars_preserving_keys": [],
+        "formatted_query_vars": [],
+        "filesystem_path_vars": [],
+        "filesystem_sink_hit": false,
+        "filesystem_features": {
+          "constructor_keyword_capture": false,
+          "file_name_split": false,
+          "file_attrs_assigned": false,
+          "fname_from_file_attrs": false,
+          "path_join_with_fname": false,
+          "open_path": false
+        },
+        "kill_guard": false
+      },
+      "evidence": [
+        {
+          "kind": "source_assignment",
+          "line": 37,
+          "expr": "user_key = cve_2024_36039_source()"
+        }
+      ]
+    }
+  ],
+  "edge_coverage": [
+    {
+      "edge_id": "e1_dict_literal_key_capture",
+      "from": "key",
+      "to": "args.keys()[*]",
+      "pattern_kind": "dict_literal_key",
+      "covered": true,
+      "reason": "tainted source variable appears in dict key position",
+      "condition": {
+        "kind": "dict_literal_key",
+        "argument_index": 0
+      }
+    },
+    {
+      "edge_id": "e2_percent_mapping_key_to_query",
+      "from": "format_mapping.keys()[*]",
+      "to": "query",
+      "pattern_kind": "percent_mapping_key",
+      "covered": true,
+      "reason": "percent formatting consumes mapping with preserved tainted keys",
+      "condition": {
+        "kind": "percent_mapping_key",
+        "argument_index": 1
+      }
+    }
+  ],
+  "feedback": [
+    "CTPC passes the current three-way structural validation set."
+  ],
+  "next_runner": {
+    "kind": "yasa-in-the-loop",
+    "state": "available_via_build_validation_rules_and_run_yasa_validation",
+    "purpose": "confirm structural simulation with baseline/enhanced YASA findings for each validation sample"
+  }
+}

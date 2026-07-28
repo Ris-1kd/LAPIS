@@ -1,0 +1,139 @@
+{
+  "runner": "yasa",
+  "scope": "full-cve",
+  "label": "baseline-after-entrypoint-fallback",
+  "case_id": "cve-2023-4033-mlflow",
+  "tool_dir": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Tool",
+  "case_path": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/control/cve-2023-4033-mlflow/case.json",
+  "source_path": "/home/ubuntu/llm-yasa-repair/py-bench/cve-2023-4033-mlflow",
+  "rule_file": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/control/cve-2023-4033-mlflow/rules/final-sink-only.json",
+  "uast_sdk_path": "/home/ubuntu/llm-yasa-repair/YASA-Engine-upstream/uast4py-linux-amd64",
+  "ctpc_file": null,
+  "ccec_file": null,
+  "checker_ids": "taint_flow_python_input_inner",
+  "dump_cg": false,
+  "status": "reported",
+  "result": "finding",
+  "returncode": 0,
+  "report_dir": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/mlflow-control-latest/runs/baseline-after-entrypoint-fallback/baseline-after-entrypoint-fallback",
+  "summary": {
+    "projectName": "cve-2023-4033-mlflow",
+    "projectPath": "/home/ubuntu/llm-yasa-repair/py-bench/cve-2023-4033-mlflow/",
+    "yasaVersion": "0.3.1",
+    "parallelWorkers": 1,
+    "cgAlgorithm": "DEFAULT",
+    "dumpAllCG": false,
+    "dumpAST": false,
+    "scanStartTime": "2026-07-28T07:25:28.679Z",
+    "scanEndTime": "2026-07-28T07:26:43.849Z",
+    "findingCount": 4,
+    "language": "python",
+    "fileCount": 413,
+    "lineCount": 103168,
+    "totalTimeMs": 75170,
+    "markedSourceCount": 1,
+    "matchedSinkCount": 46,
+    "entryPointCount": 1,
+    "parseMs": 70306,
+    "parseCodeMs": 55944,
+    "preloadMs": 314,
+    "processModuleMs": 13913,
+    "startAnalyzeMs": 269,
+    "symbolInterpretMs": 3670,
+    "execCount": 178949,
+    "execInstCount": 57665,
+    "avgExecTimePerInst": 0,
+    "avgInstExecCount": 3.1032515390618225,
+    "execTimeP70Ms": 0,
+    "execTimeP99Ms": 0,
+    "execTimeP100Ms": 0,
+    "execTimesP70": 2,
+    "execTimesP99": 24,
+    "execTimesP100": 786,
+    "ruleConfig": [
+      {
+        "checkerIds": [
+          "taint_flow_python_input_inner"
+        ],
+        "sources": {
+          "TaintSource": [
+            {
+              "path": "input_path",
+              "scopeFile": "mlflow/models/cli.py",
+              "scopeFunc": "predict",
+              "locStart": 131,
+              "locEnd": 157
+            }
+          ]
+        },
+        "sinks": {
+          "FuncCallTaintSink": [
+            {
+              "args": [
+                "0"
+              ],
+              "attribute": "PythonCommandInjection",
+              "fsig": "subprocess.Popen"
+            }
+          ]
+        },
+        "entrypoints": [
+          {
+            "filePath": "/mlflow/models/cli.py",
+            "functionName": "predict",
+            "attribute": "cve-2023-4033-mlflow-models-predict-final-sink-only"
+          }
+        ],
+        "outputAtTaint": {
+          "traceStrategy": "full"
+        }
+      }
+    ]
+  },
+  "trace_quality": {
+    "findingCount": 4,
+    "ccecVirtualSink": false,
+    "ctpcVirtualSink": false,
+    "factTraceGap": false,
+    "ctpcFactTrace": false,
+    "actualSourceToBoundaryTrace": false,
+    "traceStatus": "reported_trace",
+    "needsCtpc": false,
+    "needsTraceReview": false,
+    "decisionBasis": "Derived from SARIF sinkAttribute and trace labels. A CCEC finding with FACT TRACE GAP means callgraph repair reached the virtual sink but source-to-boundary taint propagation is still open."
+  },
+  "run": {
+    "command": [
+      "timeout",
+      "180s",
+      "npx",
+      "tsx",
+      "src/main.ts",
+      "--sourcePath",
+      "/home/ubuntu/llm-yasa-repair/py-bench/cve-2023-4033-mlflow",
+      "--language",
+      "python",
+      "--report",
+      "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/mlflow-control-latest/runs/baseline-after-entrypoint-fallback/baseline-after-entrypoint-fallback",
+      "--ruleConfigFile",
+      "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/control/cve-2023-4033-mlflow/rules/final-sink-only.json",
+      "--checkerIds",
+      "taint_flow_python_input_inner",
+      "--entrypointMode",
+      "ONLY_CUSTOM",
+      "--workerCount",
+      "1",
+      "--incremental",
+      "false",
+      "--taintTraceOutputStrategy",
+      "full",
+      "--uastSDKPath",
+      "/home/ubuntu/llm-yasa-repair/YASA-Engine-upstream/uast4py-linux-amd64"
+    ],
+    "cwd": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Tool",
+    "returncode": 0,
+    "stdout_tail": "alue:              command,\n  617: Return Value:              env=command_env,\n  618: Return Value:              capture_output=capture_output,\n  619: Return Value:              synchronous=synchronous,\n  620: Return Value:              preexec_fn=preexec_fn,\n  621: Return Value:              close_fds=True,\n  622: Return Value:              stdout=stdout,\n  623: Return Value:              stderr=stderr,\n  624: Return Value:              stdin=stdin,\n  625: Return Value:          )\n /mlflow/pyfunc/backend.py\n  AffectedNodeName: execute\n  159: CALL RETURN:             return self.prepare_env(local_path).execute(command)\n /mlflow/pyfunc/backend.py\n  AffectedNodeName: execute\n  159: CALL:              return self.prepare_env(local_path).execute(command)\n /mlflow/utils/environment.py\n  AffectedNodeName: command\n  589: ARG PASS:          command,\n /mlflow/utils/environment.py\n  AffectedNodeName: command\n  602: Var Pass:              command = [command]\n /mlflow/utils/environment.py\n  AffectedNodeName: command\n  609: Var Pass:          command = separator.join(map(str, self._activate_cmd + command))\n /mlflow/utils/environment.py\n  AffectedNodeName: command\n  611: Var Pass:              command = [\"bash\", \"-c\", command]\n /mlflow/utils/environment.py\n  AffectedNodeName: command\n  613: Var Pass:              command = [\"cmd\", \"/c\", command]\n /mlflow/utils/environment.py\n  AffectedNodeName: _exec_cmd\n  615: CALL:          return _exec_cmd(\n  616: CALL:              command,\n  617: CALL:              env=command_env,\n  618: CALL:              capture_output=capture_output,\n  619: CALL:              synchronous=synchronous,\n  620: CALL:              preexec_fn=preexec_fn,\n  621: CALL:              close_fds=True,\n  622: CALL:              stdout=stdout,\n  623: CALL:              stderr=stderr,\n  624: CALL:              stdin=stdin,\n  625: CALL:          )\n /mlflow/utils/process.py\n  AffectedNodeName: cmd\n  32:  ARG PASS:      cmd,\n /mlflow/utils/process.py\n  AffectedNodeName: cmd\n  79:  Var Pass:          cmd = list(map(str, cmd))\n /mlflow/utils/process.py\n  AffectedNodeName: subprocess.Popen\n  95:  SINK:      process = subprocess.Popen(\n  96:  SINK:          cmd,\n  97:  SINK:          env=env,\n  98:  SINK:          text=True,\n  99:  SINK:          **kwargs,\n  100: SINK:      )\n==========================================================\n  # Total-findings : 4\n========================================================== \n\nreport is write to /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/mlflow-control-latest/runs/baseline-after-entrypoint-fallback/baseline-after-entrypoint-fallback/report.sarif\n================================================================\n\nanalyze done\n[YASA] Execution completed, cost: 75170ms, heap: 436.07/493.95 MB, rss: 603.33 MB, arrayBuffers: 0.26 MB\n\n======================  Analysis Overview  =====================\nLanguage                           : python\nFiles analyzed                     : 413\nLines of code                      : 103,168\nTotal time                         : 1m15s129ms\nExecuted instruction               : 57665\nExecution count                    : 178949\nSources marked                     : 1\nSinks matched                      : 46\nValid entrypoints                  : 1\nFindings                           : 4\nAvg execution time per instruction : 0.00ms\nAvg instruction execution count    : 3.10\nExecution time 70%/99%/100%        : 0.00ms/0.00ms/0.00ms\nExecution times 70%/99%/100%       : 2.00/24.00/786.00\n================================================================\n\n\n===================  Performance Statistics  ===================\ntotal cost: 1m15s170ms\npreProcess cost: 1m10s306ms (93.5%)\n  parseCode cost: 55s944ms (79.6%)\n  preload cost: 0s314ms (0.4%)\n  processModule cost: 13s913ms (19.8%)\n  other cost: 0s135ms (0.2%)\nstartAnalyze cost: 0s269ms (0.4%)\nsymbolInterpret cost: 3s670ms (4.9%)\nother cost: 0s925ms (1.2%)\n================================================================\n\n",
+    "stderr_tail": ""
+  },
+  "interpretation": "This is a full original-CVE run. A finding here is evidence that the enhanced analyzer connected the case entrypoint, interprocedural execution context, CTPC access-path facts, and final sink rule on the original dataset."
+}

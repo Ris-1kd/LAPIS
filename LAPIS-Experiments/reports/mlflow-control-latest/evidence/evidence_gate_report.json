@@ -1,0 +1,59 @@
+{
+  "schema_version": "lapis.evidence_gate.v1",
+  "case_id": "cve-2023-4033-mlflow",
+  "case": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/control/cve-2023-4033-mlflow/case.json",
+  "baseline_summary": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/mlflow-control-latest/runs/baseline-after-entrypoint-fallback/baseline-after-entrypoint-fallback/scan_summary.json",
+  "declared_case_group": "no_gap_control",
+  "declared_repair_branch": "no_repair",
+  "gate_status": "already_reported",
+  "baseline_status": {
+    "source_hit": true,
+    "sink_hit": true,
+    "complete_taint_path_found": true,
+    "call_context_related": true,
+    "sources_marked": 1,
+    "sinks_matched": 46,
+    "findings": 4,
+    "entrypoints": 1,
+    "partial_findings": false
+  },
+  "source_forward_frontier": {
+    "available": false,
+    "frontier": null,
+    "reached": [],
+    "observations": []
+  },
+  "sink_backward_dependency": {
+    "available": false,
+    "dependency_chain": [],
+    "observations": []
+  },
+  "symbolic_callee": {
+    "present": false,
+    "callgraph": {
+      "available": false,
+      "node_count": 0,
+      "edge_count": 0,
+      "symbolic_node_count": 0,
+      "dangling_edge_count": 0,
+      "symbolic_samples": [],
+      "dangling_edge_samples": []
+    }
+  },
+  "local_structure_evidence": {
+    "available": false,
+    "kinds": [],
+    "items": {}
+  },
+  "negative_evidence": [],
+  "explosion_risk": {
+    "level": "low",
+    "dangling_edge_count": 0,
+    "symbolic_node_count": 0
+  },
+  "decision_reason": [
+    "baseline already produced a finding"
+  ],
+  "oracle_note": "This gate identifies evidence-supported candidate FNs. Benchmark oracle fields are hidden by default and must only be used after repair for evaluation.",
+  "oracle_fallback_used": false
+}

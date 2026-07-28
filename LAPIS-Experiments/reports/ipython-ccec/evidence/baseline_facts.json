@@ -1,0 +1,125 @@
+{
+  "schema_version": "lapis.baseline_facts.v1",
+  "oracle_blind": true,
+  "case": {
+    "case_id": "cve-2023-24816-ipython",
+    "project": "IPython",
+    "case_path": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/connectivity_gap/cve-2023-24816-ipython/case.json",
+    "note": "case.json is used only to locate baseline artifacts and non-oracle identifiers; source/sink/breakpoint/frontier fields are not read."
+  },
+  "artifacts": {
+    "baseline_summary": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/ipython-ccec/runs/baseline/baseline/scan_summary.json",
+    "diagnostics": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/ipython-ccec/runs/baseline/baseline/yasa-diagnostics-log.txt",
+    "sarif": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/ipython-ccec/runs/baseline/baseline/report.sarif",
+    "callgraph": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/ipython-ccec/runs/baseline/baseline/callgraph.json"
+  },
+  "scan": {
+    "projectName": "cve-2023-24816-ipython",
+    "projectPath": "/home/ubuntu/llm-yasa-repair/py-bench/cve-2023-24816-ipython/",
+    "yasaVersion": "0.3.1",
+    "language": "python",
+    "findingCount": 0,
+    "markedSourceCount": 1,
+    "matchedSinkCount": 2,
+    "entryPointCount": 1,
+    "fileCount": 295,
+    "lineCount": 73363,
+    "totalTimeMs": 50869,
+    "dumpAllCG": false,
+    "cgAlgorithm": "DEFAULT"
+  },
+  "rule_config_facts": {
+    "checker_ids": [
+      "taint_flow_python_input_inner"
+    ],
+    "sources": [
+      {
+        "kind": "FuncCallReturnValueTaintSource",
+        "fsig": "cve_2023_24816_source",
+        "values": [
+          "0"
+        ],
+        "scopeFile": "poc/poc_cve_2023_24816_ipython.py",
+        "scopeFunc": "cve_2023_24816_driver"
+      }
+    ],
+    "sinks": [
+      {
+        "kind": "FuncCallTaintSink",
+        "fsig": "os.system",
+        "args": [
+          "0"
+        ],
+        "attribute": "CVE-2023-24816-ipython-command"
+      }
+    ],
+    "entrypoints": [
+      {
+        "filePath": "/poc/poc_cve_2023_24816_ipython.py",
+        "functionName": "cve_2023_24816_driver",
+        "attribute": "poc-cve-2023-24816-final-sink-only"
+      }
+    ]
+  },
+  "diagnostics_facts": {
+    "available": true,
+    "path": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/ipython-ccec/runs/baseline/baseline/yasa-diagnostics-log.txt",
+    "log_key_counts": {
+      "scan_init": 1,
+      "scan_summary": 1
+    },
+    "samples": [
+      {
+        "log_key": "scan_init",
+        "log_time": "2026-07-27 05:55:17",
+        "string1": "0.3.1",
+        "string2": "cve-2023-24816-ipython",
+        "number1": null,
+        "number2": null,
+        "number3": null
+      },
+      {
+        "log_key": "scan_summary",
+        "log_time": "2026-07-27 05:56:07",
+        "string1": "0.3.1",
+        "string2": "cve-2023-24816-ipython",
+        "number1": 50869,
+        "number2": 73363,
+        "number3": 0
+      }
+    ]
+  },
+  "sarif_facts": {
+    "available": false,
+    "path": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/ipython-ccec/runs/baseline/baseline/report.sarif",
+    "result_count": 0,
+    "results": []
+  },
+  "callgraph_facts": {
+    "available": false,
+    "node_count": 0,
+    "edge_count": 0,
+    "symbolic_node_count": 0,
+    "dangling_edge_count": 0,
+    "symbolic_samples": [],
+    "dangling_edge_samples": []
+  },
+  "known_public_conclusion": {
+    "source_observed": true,
+    "sink_observed": true,
+    "finding_observed": false,
+    "repair_candidate_if_no_finding": true
+  },
+  "omitted_oracle_fields": [
+    "case.source",
+    "case.sink",
+    "case.breakpoint",
+    "case.breakpoint.frontier",
+    "case.expected_repair_order",
+    "case.references",
+    "rule_config_facts.sources[].fsig",
+    "rule_config_facts.sinks[].fsig",
+    "candidate_edges seeded from case_id",
+    "manual CTPC/CCEC answers"
+  ]
+}

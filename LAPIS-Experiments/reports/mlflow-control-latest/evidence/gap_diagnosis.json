@@ -1,0 +1,18 @@
+{
+  "schema_version": "lapis.gap_diagnosis.v1",
+  "case_id": "cve-2023-4033-mlflow",
+  "gate": "LAPIS/LAPIS-Experiments/reports/mlflow-control-latest/evidence/evidence_gate_report.json",
+  "gate_status": "already_reported",
+  "diagnosis": {
+    "gap_type": "not_repair_candidate",
+    "confirmed_gap_type": "not_repair_candidate",
+    "primary_gap": null,
+    "secondary_gap": null,
+    "next_step": "stop",
+    "needs_post_ccec_rediagnosis": false,
+    "reason": [
+      "Evidence Gate status is 'already_reported', not 'candidate_fn'"
+    ]
+  },
+  "repair_order": []
+}

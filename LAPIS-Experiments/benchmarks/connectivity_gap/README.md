@@ -23,6 +23,5 @@ Each case should follow:
 Copy `_TEMPLATE_CASE/` and rename it to the concrete case id, for example:
 
 ```text
-cve-2024-27758-rpyc/
+cve-2023-24816-ipython/
 ```
-

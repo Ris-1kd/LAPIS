@@ -1,0 +1,20 @@
+{
+  "schema_version": "lapis.gap_diagnosis.v1",
+  "case_id": "cve-2026-24486-python-multipart",
+  "gate": "LAPIS/LAPIS-Experiments/reports/python-multipart-llm-auto-mixed-latest/evidence/evidence_gate_report.json",
+  "gate_status": "candidate_fn",
+  "diagnosis": {
+    "gap_type": "propagation_gap",
+    "confirmed_gap_type": "propagation_gap",
+    "primary_gap": "propagation_gap",
+    "secondary_gap": null,
+    "next_step": "run_ctpc",
+    "needs_post_ccec_rediagnosis": false,
+    "reason": [
+      "local structure/frontier/backward evidence indicates a Propagation Gap"
+    ]
+  },
+  "repair_order": [
+    "ctpc"
+  ]
+}

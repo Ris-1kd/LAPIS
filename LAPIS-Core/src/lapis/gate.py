@@ -169,6 +169,8 @@ def _decide_gate(
     local_structure: dict[str, Any],
     negative_evidence: list[dict[str, Any]],
     explosion_risk: dict[str, Any],
+    declared_repair_branch: str | None = None,
+    evidence: dict[str, Any] | None = None,
 ) -> tuple[str, list[str]]:
     reasons: list[str] = []
     if baseline["complete_taint_path_found"]:
@@ -176,6 +178,18 @@ def _decide_gate(
     if not baseline["source_hit"]:
         return "true_negative", ["source was not marked by baseline"]
     if not baseline["sink_hit"]:
+        branch = declared_repair_branch or ""
+        sink_anchor = (evidence or {}).get("sink") or {}
+        source_anchor = (evidence or {}).get("source") or {}
+        if (
+            branch in {"ccec", "ccec_then_ctpc"}
+            and bool(source_anchor.get("matches_anchor"))
+            and bool(sink_anchor.get("matches_anchor"))
+        ):
+            return "candidate_fn", [
+                "final sink anchor exists in source but was not matched by baseline",
+                f"declared repair branch is {branch}, so treat this as a callgraph/connectivity candidate",
+            ]
         return "true_negative", ["sink was not matched by baseline"]
     if not baseline["call_context_related"]:
         return "infeasible", ["source and sink do not share an observed entrypoint/call context"]
@@ -222,7 +236,17 @@ def build_evidence_gate_report(
     negatives = _negative_evidence(evidence)
     symbolic_present = callgraph_summary.get("dangling_edge_count", 0) > 0
     risk = _explosion_risk(callgraph_summary)
-    status, reasons = _decide_gate(baseline, frontier, backward, symbolic_present, local, negatives, risk)
+    status, reasons = _decide_gate(
+        baseline,
+        frontier,
+        backward,
+        symbolic_present,
+        local,
+        negatives,
+        risk,
+        case.get("repair_branch"),
+        evidence,
+    )
     report = {
         "schema_version": "lapis.evidence_gate.v1",
         "case_id": case.get("case_id"),

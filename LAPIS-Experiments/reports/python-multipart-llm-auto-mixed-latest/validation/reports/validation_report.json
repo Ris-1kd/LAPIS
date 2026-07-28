@@ -1,0 +1,388 @@
+{
+  "ctpc": "LAPIS/LAPIS-Experiments/reports/python-multipart-llm-auto-mixed-latest/ctpc/ctpc/ctpc.json",
+  "validation_dir": "LAPIS/LAPIS-Experiments/reports/python-multipart-llm-auto-mixed-latest/validation/validation",
+  "status": "accepted",
+  "sample_results": [
+    {
+      "sample": "must-flow",
+      "expected": "finding",
+      "predicted": "finding",
+      "passed": true,
+      "syntax_ok": true,
+      "syntax_error": null,
+      "features": {
+        "source_hit": true,
+        "sink_hit": true,
+        "tainted_names": [
+          "filename"
+        ],
+        "dict_vars_with_tainted_key": [],
+        "dict_vars_with_tainted_value": [],
+        "escaped_vars_preserving_keys": [],
+        "formatted_query_vars": [],
+        "filesystem_path_vars": [
+          "fname",
+          "parser",
+          "path"
+        ],
+        "filesystem_sink_hit": true,
+        "filesystem_features": {
+          "constructor_keyword_capture": true,
+          "file_name_split": true,
+          "file_attrs_assigned": true,
+          "fname_from_file_attrs": true,
+          "path_join_with_fname": true,
+          "open_path": true
+        },
+        "kill_guard": false
+      },
+      "evidence": [
+        {
+          "kind": "source_assignment",
+          "line": 40,
+          "expr": "filename = cve_2026_24486_source()"
+        },
+        {
+          "kind": "constructor_keyword_capture",
+          "line": 41,
+          "expr": "parser = FormParser(file_name=filename)"
+        },
+        {
+          "kind": "constructor_keyword_capture",
+          "line": 41,
+          "expr": "FormParser(file_name=filename)"
+        },
+        {
+          "kind": "file_attrs_assigned",
+          "line": 11,
+          "expr": "self._file_base = base"
+        },
+        {
+          "kind": "file_attrs_assigned",
+          "line": 12,
+          "expr": "self._ext = ext"
+        },
+        {
+          "kind": "file_attrs_assigned",
+          "line": 14,
+          "expr": "self._file_base = \"tmp\""
+        },
+        {
+          "kind": "file_attrs_assigned",
+          "line": 15,
+          "expr": "self._ext = \".bin\""
+        },
+        {
+          "kind": "file_attrs_assigned",
+          "line": 19,
+          "expr": "fname = self._file_base + self._ext if keep_extensions else self._file_base"
+        },
+        {
+          "kind": "fname_from_file_attrs",
+          "line": 19,
+          "expr": "fname = self._file_base + self._ext if keep_extensions else self._file_base"
+        },
+        {
+          "kind": "path_join_keep_filename",
+          "line": 22,
+          "expr": "os.path.join(file_dir, fname)"
+        },
+        {
+          "kind": "filesystem_sink_argument",
+          "line": 24,
+          "expr": "open(path, \"w+b\")"
+        },
+        {
+          "kind": "file_name_split",
+          "line": 10,
+          "expr": "os.path.splitext(file_name)"
+        }
+      ]
+    },
+    {
+      "sample": "must-not-flow",
+      "expected": "no_finding",
+      "predicted": "no_finding",
+      "passed": true,
+      "syntax_ok": true,
+      "syntax_error": null,
+      "features": {
+        "source_hit": true,
+        "sink_hit": true,
+        "tainted_names": [
+          "filename"
+        ],
+        "dict_vars_with_tainted_key": [],
+        "dict_vars_with_tainted_value": [],
+        "escaped_vars_preserving_keys": [],
+        "formatted_query_vars": [],
+        "filesystem_path_vars": [
+          "fname",
+          "parser",
+          "path"
+        ],
+        "filesystem_sink_hit": true,
+        "filesystem_features": {
+          "constructor_keyword_capture": false,
+          "file_name_split": true,
+          "file_attrs_assigned": true,
+          "fname_from_file_attrs": true,
+          "path_join_with_fname": true,
+          "open_path": true
+        },
+        "kill_guard": false
+      },
+      "evidence": [
+        {
+          "kind": "source_assignment",
+          "line": 42,
+          "expr": "filename = cve_2026_24486_source()"
+        },
+        {
+          "kind": "constructor_keyword_capture",
+          "line": 43,
+          "expr": "parser = FormParser(file_name=None, field_name=filename)"
+        },
+        {
+          "kind": "file_attrs_assigned",
+          "line": 12,
+          "expr": "self._file_base = base"
+        },
+        {
+          "kind": "file_attrs_assigned",
+          "line": 13,
+          "expr": "self._ext = ext"
+        },
+        {
+          "kind": "file_attrs_assigned",
+          "line": 15,
+          "expr": "self._file_base = \"tmp\""
+        },
+        {
+          "kind": "file_attrs_assigned",
+          "line": 16,
+          "expr": "self._ext = \".bin\""
+        },
+        {
+          "kind": "file_attrs_assigned",
+          "line": 20,
+          "expr": "fname = self._file_base + self._ext if keep_extensions else self._file_base"
+        },
+        {
+          "kind": "fname_from_file_attrs",
+          "line": 20,
+          "expr": "fname = self._file_base + self._ext if keep_extensions else self._file_base"
+        },
+        {
+          "kind": "path_join_keep_filename",
+          "line": 23,
+          "expr": "os.path.join(file_dir, fname)"
+        },
+        {
+          "kind": "filesystem_sink_argument",
+          "line": 25,
+          "expr": "open(path, \"w+b\")"
+        },
+        {
+          "kind": "file_name_split",
+          "line": 11,
+          "expr": "os.path.splitext(file_name)"
+        }
+      ]
+    },
+    {
+      "sample": "must-kill",
+      "expected": "no_finding",
+      "predicted": "no_finding",
+      "passed": true,
+      "syntax_ok": true,
+      "syntax_error": null,
+      "features": {
+        "source_hit": true,
+        "sink_hit": true,
+        "tainted_names": [
+          "filename"
+        ],
+        "dict_vars_with_tainted_key": [],
+        "dict_vars_with_tainted_value": [],
+        "escaped_vars_preserving_keys": [],
+        "formatted_query_vars": [],
+        "filesystem_path_vars": [
+          "fname",
+          "parser",
+          "path"
+        ],
+        "filesystem_sink_hit": true,
+        "filesystem_features": {
+          "constructor_keyword_capture": true,
+          "file_name_split": true,
+          "file_attrs_assigned": true,
+          "fname_from_file_attrs": true,
+          "path_join_with_fname": true,
+          "open_path": true
+        },
+        "kill_guard": true
+      },
+      "evidence": [
+        {
+          "kind": "source_assignment",
+          "line": 41,
+          "expr": "filename = cve_2026_24486_source()"
+        },
+        {
+          "kind": "constructor_keyword_capture",
+          "line": 42,
+          "expr": "parser = FormParser(file_name=filename)"
+        },
+        {
+          "kind": "constructor_keyword_capture",
+          "line": 42,
+          "expr": "FormParser(file_name=filename)"
+        },
+        {
+          "kind": "file_attrs_assigned",
+          "line": 11,
+          "expr": "self._file_base = base"
+        },
+        {
+          "kind": "file_attrs_assigned",
+          "line": 12,
+          "expr": "self._ext = ext"
+        },
+        {
+          "kind": "file_attrs_assigned",
+          "line": 14,
+          "expr": "self._file_base = \"tmp\""
+        },
+        {
+          "kind": "file_attrs_assigned",
+          "line": 15,
+          "expr": "self._ext = \".bin\""
+        },
+        {
+          "kind": "file_attrs_assigned",
+          "line": 19,
+          "expr": "fname = self._file_base + self._ext if keep_extensions else self._file_base"
+        },
+        {
+          "kind": "fname_from_file_attrs",
+          "line": 19,
+          "expr": "fname = self._file_base + self._ext if keep_extensions else self._file_base"
+        },
+        {
+          "kind": "path_join_keep_filename",
+          "line": 23,
+          "expr": "os.path.join(file_dir, fname)"
+        },
+        {
+          "kind": "filesystem_sink_argument",
+          "line": 25,
+          "expr": "open(path, \"w+b\")"
+        },
+        {
+          "kind": "file_name_split",
+          "line": 10,
+          "expr": "os.path.splitext(file_name)"
+        }
+      ]
+    }
+  ],
+  "edge_coverage": [
+    {
+      "edge_id": "kw_capture_formparser_file_name",
+      "from": "filename",
+      "to": "file_name",
+      "pattern_kind": "constructor_keyword_capture",
+      "covered": true,
+      "reason": "filesystem validation sample propagates source-derived filename/path into sink argument",
+      "condition": {
+        "kind": "constructor_keyword_capture",
+        "callee": "FormParser",
+        "argument_index": 0
+      }
+    },
+    {
+      "edge_id": "file_name_to_file_base",
+      "from": "file_name",
+      "to": "self._file_base",
+      "pattern_kind": "direct_assignment",
+      "covered": true,
+      "reason": "filesystem validation sample propagates source-derived filename/path into sink argument",
+      "condition": {
+        "kind": "direct_assignment",
+        "argument_index": 0
+      }
+    },
+    {
+      "edge_id": "file_name_to_file_ext",
+      "from": "file_name",
+      "to": "self._ext",
+      "pattern_kind": "direct_assignment",
+      "covered": true,
+      "reason": "filesystem validation sample propagates source-derived filename/path into sink argument",
+      "condition": {
+        "kind": "direct_assignment",
+        "argument_index": 0
+      }
+    },
+    {
+      "edge_id": "file_base_to_fname",
+      "from": "self._file_base",
+      "to": "fname",
+      "pattern_kind": "direct_assignment",
+      "covered": true,
+      "reason": "filesystem validation sample propagates source-derived filename/path into sink argument",
+      "condition": {
+        "kind": "direct_assignment",
+        "argument_index": 0
+      }
+    },
+    {
+      "edge_id": "fname_to_path_join_guarded",
+      "from": "fname",
+      "to": "path",
+      "pattern_kind": "path_join_keep_filename",
+      "covered": true,
+      "reason": "filesystem validation sample propagates source-derived filename/path into sink argument",
+      "condition": {
+        "kind": "path_join_keep_filename",
+        "argument_index": 1
+      }
+    },
+    {
+      "edge_id": "path_to_open_sink",
+      "from": "path",
+      "to": "$arg0",
+      "pattern_kind": "filesystem_sink_argument",
+      "covered": true,
+      "reason": "filesystem validation sample propagates source-derived filename/path into sink argument",
+      "condition": {
+        "kind": "filesystem_sink_argument",
+        "callee": "open",
+        "argument_index": 0
+      }
+    },
+    {
+      "edge_id": "virtual_sink_at_parser_write",
+      "from": "file_name",
+      "to": "$arg0",
+      "pattern_kind": "filesystem_sink_argument",
+      "covered": true,
+      "reason": "filesystem validation sample propagates source-derived filename/path into sink argument",
+      "condition": {
+        "kind": "filesystem_sink_argument",
+        "callee": "parser.write",
+        "argument_index": 0,
+        "virtual_final_sink": "open"
+      }
+    }
+  ],
+  "feedback": [
+    "CTPC passes the current three-way structural validation set."
+  ],
+  "next_runner": {
+    "kind": "yasa-in-the-loop",
+    "state": "available_via_build_validation_rules_and_run_yasa_validation",
+    "purpose": "confirm structural simulation with baseline/enhanced YASA findings for each validation sample"
+  }
+}

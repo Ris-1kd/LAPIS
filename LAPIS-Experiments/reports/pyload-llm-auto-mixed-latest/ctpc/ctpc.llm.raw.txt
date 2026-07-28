@@ -1,0 +1,71 @@
+{
+  "schema_version": "ctpc.v2",
+  "contract_name": "pyload_update_link_info_join_fstring_sql",
+  "gap_type": ["access_path_propagation", "fstring_sink_argument_binding"],
+  "applies_to": {
+    "language": "python",
+    "risk_kind": "sql_injection"
+  },
+  "fact_types": [
+    {
+      "name": "user_input",
+      "shape": {"access_path": "string"}
+    }
+  ],
+  "propagation_edges": [
+    {
+      "edge_id": "e1_url_to_list_tuple_index3",
+      "event": "assignment",
+      "pattern": {"kind": "direct_assignment", "argument_index": 0},
+      "from": {"fact": "user_input", "expr": "url"},
+      "to": {"fact": "user_input", "expr": "data", "access_path": "[0][3]", "risk_kind": "sql_injection"},
+      "evidence": {"file": "poc/poc_cve_2025_55156_pyload.py", "line": 17, "code": "data = [(\"name\", 1, 2, url)]"},
+      "description": "Propagate taint from url into the list literal element at tuple index 3 within data."
+    },
+    {
+      "edge_id": "e2_data_index3_to_statuses_via_gen",
+      "event": "assignment",
+      "pattern": {"kind": "direct_assignment", "argument_index": 0},
+      "from": {"fact": "user_input", "expr": "x[3] for x in data"},
+      "to": {"fact": "user_input", "expr": "statuses", "access_path": "$", "risk_kind": "sql_injection"},
+      "evidence": {"file": "src/pyload/core/database/file_database.py", "line": 270, "code": "statuses = \"','\".join(x[3] for x in data)"},
+      "description": "Propagate taint from each tuple's element at index 3 in 'data' into the joined string 'statuses'."
+    },
+    {
+      "edge_id": "e3_statuses_into_execute_fstring",
+      "event": "function_call",
+      "pattern": {"kind": "sink_argument", "callee": "self.c.execute", "argument_index": 0},
+      "from": {"fact": "user_input", "expr": "statuses"},
+      "to": {"fact": "user_input", "expr": "SQL f-string", "access_path": "$", "risk_kind": "sql_injection"},
+      "evidence": {"file": "src/pyload/core/database/file_database.py", "line": 271, "code": "self.c.execute(f\"SELECT id FROM links WHERE url IN ('{statuses}')\")"},
+      "description": "Capture embedding of the tainted 'statuses' into the SQL f-string passed to self.c.execute."
+    }
+  ],
+  "function_summaries": [
+    {
+      "summary_id": "fs1_join_returns_argument_taint",
+      "event": "function_call",
+      "pattern": {
+        "kind": "return_fact_from_argument",
+        "callee": "join",
+        "argument_index": 0,
+        "receiver_policy": "any"
+      },
+      "from": {"fact": "user_input", "expr": "$arg0.access_path"},
+      "to": {"fact": "user_input", "expr": "$return", "access_path": "$return.access_path", "risk_kind": "sql_injection"},
+      "evidence": {"file": "src/pyload/core/database/file_database.py", "line": 270, "code": "\"','\".join(x[3] for x in data)"}
+    }
+  ],
+  "risk_upgrades": [],
+  "kill_conditions": [],
+  "validation_expectations": {
+    "must_flow": "finding",
+    "must_not_flow": "no_finding",
+    "must_kill": "no_finding"
+  },
+  "description": "The missing propagation is through a list-of-tuples container and a generator-based join into an f-string. User input 'url' is inserted at tuple index 3 of the only element in 'data'. In update_link_info, a generator expression extracts x[3] for x in data and \"','\".join(...) builds 'statuses', which is interpolated into an f-string passed to self.c.execute. The CTPC adds: (1) an assignment edge from 'url' to data[0][3]; (2) an assignment edge modeling generator extraction of index 3 from 'data' into 'statuses' and a function summary for join to preserve taint into its return; and (3) a sink-argument edge binding 'statuses' to the SQL f-string argument of self.c.execute.",
+  "notes": [
+    "This contract confines propagation to tuple element index 3 as written in the generator and only to the f-string passed to self.c.execute at the evidenced sink line.",
+    "Ordinary call connectivity from db.update_link_info(data) to its definition is handled by the analyzer's materialization; this CTPC focuses on container index, join, and f-string embedding semantics."
+  ]
+}

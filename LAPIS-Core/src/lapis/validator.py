@@ -60,7 +60,7 @@ def _is_source_call(node: ast.AST) -> bool:
 
 def _has_sink_call(module: ast.Module) -> bool:
     for node in ast.walk(module):
-        if isinstance(node, ast.Call) and _name(node.func) in {"sink", "open"}:
+        if isinstance(node, ast.Call) and _name(node.func) in {"sink", "open", "_query", "self._query"}:
             return True
     return False
 
@@ -89,6 +89,15 @@ def _has_filesystem_kill_guard(module: ast.Module, tainted_names: set[str]) -> b
         has_return = any(isinstance(stmt, (ast.Return, ast.Raise)) for stmt in node.body)
         if rejects_path_traversal and has_return:
             return True
+    for node in ast.walk(module):
+        if not isinstance(node, ast.Call):
+            continue
+        call_name = _name(node.func)
+        if not (call_name.endswith("save") or call_name.endswith("write")):
+            continue
+        for keyword in node.keywords:
+            if keyword.arg == "keep_filename" and isinstance(keyword.value, ast.Constant) and keyword.value.value is False:
+                return True
     return False
 
 
@@ -232,7 +241,7 @@ def analyze_validation_code(path: Path) -> dict[str, Any]:
         if not isinstance(node, ast.Call):
             continue
         call_name = _name(node.func)
-        if call_name not in {"sink", "open"}:
+        if call_name not in {"sink", "open", "_query", "self._query"}:
             continue
         arg_names = set()
         for arg in node.args:
@@ -417,7 +426,14 @@ def build_yasa_validation_rules(validation_dir: Path, out_dir: Path) -> dict[str
         sink_fsig = "sink"
         sink_arg = "0"
         for node in ast.walk(module):
-            if isinstance(node, ast.Call) and _name(node.func) == "open":
+            if not isinstance(node, ast.Call):
+                continue
+            call_name = _name(node.func)
+            if call_name in {"_query", "self._query"}:
+                sink_fsig = "_query"
+                sink_arg = "0"
+                break
+            if call_name == "open":
                 sink_fsig = "open"
                 sink_arg = "0"
                 break

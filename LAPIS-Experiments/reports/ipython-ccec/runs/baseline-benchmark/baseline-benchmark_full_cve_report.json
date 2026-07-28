@@ -1,0 +1,140 @@
+{
+  "runner": "yasa",
+  "scope": "full-cve",
+  "label": "baseline-benchmark",
+  "case_id": "cve-2023-24816-ipython",
+  "tool_dir": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Tool",
+  "case_path": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/connectivity_gap/cve-2023-24816-ipython/case.json",
+  "source_path": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/benchmarks/connectivity_gap/cve-2023-24816-ipython",
+  "rule_file": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/connectivity_gap/cve-2023-24816-ipython/rules/final-sink-only.json",
+  "uast_sdk_path": "/home/ubuntu/llm-yasa-repair/YASA-Engine-upstream/uast4py-linux-amd64",
+  "ctpc_file": null,
+  "ccec_file": null,
+  "checker_ids": "taint_flow_python_input_inner",
+  "dump_cg": false,
+  "status": "not_reported",
+  "result": "no_finding",
+  "returncode": 0,
+  "report_dir": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/ipython-ccec/runs/baseline-benchmark/baseline-benchmark",
+  "summary": {
+    "projectName": "cve-2023-24816-ipython",
+    "projectPath": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/benchmarks/connectivity_gap/cve-2023-24816-ipython/",
+    "yasaVersion": "0.3.1",
+    "parallelWorkers": 1,
+    "cgAlgorithm": "DEFAULT",
+    "dumpAllCG": false,
+    "dumpAST": false,
+    "scanStartTime": "2026-07-28T03:39:51.253Z",
+    "scanEndTime": "2026-07-28T03:40:42.799Z",
+    "findingCount": 0,
+    "language": "python",
+    "fileCount": 295,
+    "lineCount": 73363,
+    "totalTimeMs": 51546,
+    "markedSourceCount": 1,
+    "matchedSinkCount": 2,
+    "entryPointCount": 1,
+    "parseMs": 50962,
+    "parseCodeMs": 43145,
+    "preloadMs": 97,
+    "processModuleMs": 7677,
+    "startAnalyzeMs": 183,
+    "symbolInterpretMs": 14,
+    "execCount": 63699,
+    "execInstCount": 26940,
+    "avgExecTimePerInst": 0,
+    "avgInstExecCount": 2.3644766146993317,
+    "execTimeP70Ms": 0,
+    "execTimeP99Ms": 0,
+    "execTimeP100Ms": 0,
+    "execTimesP70": 2,
+    "execTimesP99": 12,
+    "execTimesP100": 163,
+    "ruleConfig": [
+      {
+        "checkerIds": [
+          "taint_flow_python_input_inner"
+        ],
+        "sources": {
+          "FuncCallReturnValueTaintSource": [
+            {
+              "fsig": "cve_2023_24816_source",
+              "values": [
+                "0"
+              ],
+              "scopeFile": "poc/poc_cve_2023_24816_ipython.py",
+              "scopeFunc": "cve_2023_24816_driver"
+            }
+          ]
+        },
+        "sinks": {
+          "FuncCallTaintSink": [
+            {
+              "args": [
+                "0"
+              ],
+              "attribute": "CVE-2023-24816-ipython-command",
+              "fsig": "os.system"
+            }
+          ]
+        },
+        "entrypoints": [
+          {
+            "filePath": "/poc/poc_cve_2023_24816_ipython.py",
+            "functionName": "cve_2023_24816_driver",
+            "attribute": "poc-cve-2023-24816-final-sink-only"
+          }
+        ],
+        "outputAtTaint": {
+          "traceStrategy": "full"
+        }
+      }
+    ]
+  },
+  "trace_quality": {
+    "findingCount": 0,
+    "ccecVirtualSink": false,
+    "ctpcVirtualSink": false,
+    "factTraceGap": false,
+    "ctpcFactTrace": false,
+    "actualSourceToBoundaryTrace": false,
+    "traceStatus": "no_finding_trace",
+    "needsCtpc": false,
+    "needsTraceReview": false,
+    "decisionBasis": "Derived from SARIF sinkAttribute and trace labels. A CCEC finding with FACT TRACE GAP means callgraph repair reached the virtual sink but source-to-boundary taint propagation is still open."
+  },
+  "run": {
+    "command": [
+      "timeout",
+      "180s",
+      "npx",
+      "tsx",
+      "src/main.ts",
+      "--sourcePath",
+      "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/benchmarks/connectivity_gap/cve-2023-24816-ipython",
+      "--language",
+      "python",
+      "--report",
+      "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/reports/ipython-ccec/runs/baseline-benchmark/baseline-benchmark",
+      "--ruleConfigFile",
+      "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/cases/connectivity_gap/cve-2023-24816-ipython/rules/final-sink-only.json",
+      "--checkerIds",
+      "taint_flow_python_input_inner",
+      "--entrypointMode",
+      "ONLY_CUSTOM",
+      "--workerCount",
+      "1",
+      "--incremental",
+      "false",
+      "--taintTraceOutputStrategy",
+      "full",
+      "--uastSDKPath",
+      "/home/ubuntu/llm-yasa-repair/YASA-Engine-upstream/uast4py-linux-amd64"
+    ],
+    "cwd": "/home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Tool",
+    "returncode": 0,
+    "stdout_tail": "uage: python\n[YASA][init] Analysis analyzer: PythonAnalyzer\n[YASA][init] Loading checker: taint_flow_python_input_inner from /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Tool/src/checker/taint/python/python-taint-checker.ts\n[YASA][init] Successfully loaded 1 checker(s): [taint_flow_python_input_inner]\n[YASA] Executing preProcess\n[YASA][preProcess] Executing parseCode\n[python-ast-builder] parsePackage error: /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/benchmarks/connectivity_gap/cve-2023-24816-ipython/\n[YASA][preProcess] Completed parseCode, cost: 43145ms, heap: 138.81/161.41 MB, rss: 249.05 MB, arrayBuffers: 0.05 MB\n[YASA][preProcess] Executing preload\n[YASA][preProcess] Completed preload, cost: 97ms, heap: 137.91/163.76 MB, rss: 250.13 MB, arrayBuffers: 0.05 MB\n[YASA][preProcess] Executing processModule\nCircular import detected for: /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/benchmarks/connectivity_gap/cve-2023-24816-ipython/source/IPython/utils/traitlets.py\nCircular import detected for: /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/benchmarks/connectivity_gap/cve-2023-24816-ipython/source/IPython/utils/io.py\nCircular import detected for: /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/benchmarks/connectivity_gap/cve-2023-24816-ipython/source/IPython/core/completer.py\nCircular import detected for: /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/benchmarks/connectivity_gap/cve-2023-24816-ipython/source/IPython/terminal/interactiveshell.py\nCircular import detected for: /home/ubuntu/llm-yasa-repair/LAPIS/LAPIS-Experiments/benchmarks/connectivity_gap/cve-2023-24816-ipython/source/IPython/terminal/embed.py\n[YASA][preProcess] Completed processModule, cost: 7677ms, heap: 224.7/257.14 MB, rss: 352.95 MB, arrayBuffers: 0.05 MB\n[YASA] Completed preProcess, cost: 50962ms, heap: 224.7/257.14 MB, rss: 352.95 MB, arrayBuffers: 0.05 MB\n[YASA] Executing startAnalyze\n[YASA] Completed startAnalyze, cost: 183ms, heap: 225.25/260.44 MB, rss: 356.29 MB, arrayBuffers: 0.05 MB\n[YASA] Executing symbolInterpret\nEntryPoint [/poc/poc_cve_2023_24816_ipython.cve_2023_24816_driver] is executing\n[YASA] Completed symbolInterpret, cost: 14ms, heap: 225.81/260.69 MB, rss: 356.29 MB, arrayBuffers: 0.05 MB\nFound 4 potential output strategy files\nRegistered strategy: callchain from callchain-output-strategy.ts\nRegistered strategy: callgraph from callgraph-output-strategy.ts\nRegistered strategy: interactive from interactive-output-strategy.ts\nRegistered strategy: taintflow from taint-output-strategy.ts\nSuccessfully registered 4 output strategies\n\n=======================  outputFindings  =======================\n================================================================\n\nanalyze done\n[YASA] Execution completed, cost: 51546ms, heap: 232.44/262.86 MB, rss: 358.55 MB, arrayBuffers: 0.09 MB\n\n======================  Analysis Overview  =====================\nLanguage                           : python\nFiles analyzed                     : 295\nLines of code                      : 73,363\nTotal time                         : 51s514ms\nExecuted instruction               : 26940\nExecution count                    : 63699\nSources marked                     : 1\nSinks matched                      : 2\nValid entrypoints                  : 1\nFindings                           : 0\nAvg execution time per instruction : 0.00ms\nAvg instruction execution count    : 2.36\nExecution time 70%/99%/100%        : 0.00ms/0.00ms/0.00ms\nExecution times 70%/99%/100%       : 2.00/12.00/163.00\n================================================================\n\n\n===================  Performance Statistics  ===================\ntotal cost: 51s546ms\npreProcess cost: 50s962ms (98.9%)\n  parseCode cost: 43s145ms (84.7%)\n  preload cost: 0s97ms (0.2%)\n  processModule cost: 7s677ms (15.1%)\n  other cost: 0s43ms (0.1%)\nstartAnalyze cost: 0s183ms (0.4%)\nsymbolInterpret cost: 0s14ms (0.0%)\nother cost: 0s387ms (0.8%)\n================================================================\n\n",
+    "stderr_tail": ""
+  },
+  "interpretation": "This is a full original-CVE run. A finding here is evidence that the enhanced analyzer connected the case entrypoint, interprocedural execution context, CTPC access-path facts, and final sink rule on the original dataset."
+}

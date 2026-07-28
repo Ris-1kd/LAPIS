@@ -1,0 +1,114 @@
+{
+  "schema_version": "lapis.ccec_candidates.v1",
+  "case_id": "cve-2023-24816-ipython",
+  "gap_type": "connectivity_gap",
+  "repair_branch": "ccec",
+  "ccec_mode": "hard",
+  "generation_mechanism": "llm_synthesized_virtual_or_materialized_edge",
+  "llm_role": "synthesize a guarded dynamic edge contract from AST rebinding evidence",
+  "candidate_edges": [
+    {
+      "edge_id": "ccec-1",
+      "caller": "IPython.utils.terminal.set_term_title#line_120",
+      "callsite": "IPython/utils/terminal.py:124",
+      "boundary_callsite": "IPython/utils/terminal.py:124 _set_term_title(title)",
+      "callee": "IPython.utils.terminal._set_term_title#line_104",
+      "callee_kind": "rebound_function",
+      "target": {
+        "file": "IPython/utils/terminal.py",
+        "line": 104,
+        "function": "_set_term_title",
+        "args": [
+          "title"
+        ]
+      },
+      "confidence": 0.88,
+      "guards": [
+        "At IPython/utils/terminal.py:124, the symbol _set_term_title is rebound/resolved to the implementation defined at line 104 with signature _set_term_title(title).",
+        "This edge must not apply when the alias _set_term_title refers to the zero-argument definition at line 56 (signature mismatch).",
+        "This edge applies when the module-level guarded/rebinding selection chooses the title-arg implementation at line 104 among the multiple in-module definitions."
+      ],
+      "guard_evidence": [
+        {
+          "condition": "Callsite provides one argument: _set_term_title(title).",
+          "derived_from": "ast_callsite",
+          "evidence": {
+            "file": "IPython/utils/terminal.py",
+            "line": 124,
+            "code": "_set_term_title(title)"
+          }
+        },
+        {
+          "condition": "One candidate definition matches the call: def _set_term_title(title) at line 104.",
+          "derived_from": "function_signature",
+          "evidence": {
+            "file": "IPython/utils/terminal.py",
+            "line": 104,
+            "code": "def _set_term_title(title): ..."
+          }
+        },
+        {
+          "condition": "Exclude zero-arg definition that cannot match the call.",
+          "derived_from": "function_signature",
+          "evidence": {
+            "file": "IPython/utils/terminal.py",
+            "line": 56,
+            "code": "def _set_term_title(): ..."
+          }
+        },
+        {
+          "condition": "Multiple in-module definitions exist; resolution is guarded/rebound.",
+          "derived_from": "baseline_diagnostic",
+          "evidence": {
+            "file": "IPython/utils/terminal.py",
+            "line": 120,
+            "code": "connectivity_candidates kind: module_rebinding_or_guarded_dispatch with multiple _set_term_title definitions (lines 56, 100, 104)"
+          }
+        }
+      ],
+      "evidence": [
+        "Connectivity candidate identifies boundary callsite _set_term_title(title) in set_term_title (IPython/utils/terminal.py:124).",
+        "Multiple definitions of _set_term_title are present in IPython/utils/terminal.py at lines 56, 100, and 104.",
+        "Sink-reaching definition is at line 104; suggested_materialized_edge prefers this concrete rebound target."
+      ],
+      "contract": {
+        "preconditions": [
+          "Local symbol _set_term_title at set_term_title’s callsite is bound to the definition at IPython/utils/terminal.py:104.",
+          "The call provides one argument (title) matching the callee signature."
+        ],
+        "effects": [
+          {
+            "kind": "add_call_edge",
+            "from": "IPython.utils.terminal.set_term_title#line_120",
+            "to": "IPython.utils.terminal._set_term_title#line_104",
+            "at": "IPython/utils/terminal.py:124"
+          }
+        ],
+        "must_not_apply_when": [
+          "_set_term_title is bound to the zero-argument definition at line 56.",
+          "_set_term_title is bound to a different definition than the materialized target at line 104."
+        ]
+      }
+    }
+  ],
+  "ranking": {
+    "top_k": 1,
+    "ranking_reason": [
+      "Only one candidate definition is both argument-compatible with the call and explicitly suggested as a materialized rebound target.",
+      "The connectivity candidate flags line 104 as sink-reaching and provides a suggested_materialized_edge to that concrete definition.",
+      "Preferring a materialized callee allows interprocedural analysis of the callee body after callgraph repair."
+    ]
+  },
+  "validation_expectations": {
+    "structural": "callee exists or can be materialized from evidence",
+    "graph_progress": "source frontier advances beyond the symbolic/dangling callsite",
+    "taint_progress": "source becomes closer to sink; possible propagation gaps require post-CCEC rediagnosis"
+  },
+  "dataflow_still_required": true,
+  "notes": [
+    "Edge synthesized from local AST connectivity evidence indicating module rebinding/guarded dispatch of _set_term_title.",
+    "Prefer the suggested materialized rebound target at IPython/utils/terminal.py:104 over a virtual edge to the sink.",
+    "If runtime binding selects a different _set_term_title variant (e.g., the one at line 100), this contract is guarded to not apply; additional edges can be considered after rerun if needed.",
+    "Post-CCEC rerun is required to determine if a residual propagation gap remains."
+  ]
+}
