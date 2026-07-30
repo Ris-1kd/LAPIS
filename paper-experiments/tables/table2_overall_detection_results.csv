@@ -1,3 +1,3 @@
 method,detected_cves,recall,precision,f1,path_recovery,false_positives,notes
-YASA,TBD,TBD,TBD,TBD,TBD,TBD,TBD
-LAPIS,TBD,TBD,TBD,TBD,TBD,TBD,TBD
+YASA,TBD,TBD,TBD,TBD,TBD,TBD,Original upstream baseline; see paper-experiments/baselines/yasa-original-tool.md
+LAPIS,TBD,TBD,TBD,TBD,TBD,TBD,LAPIS-Tool with validated CCEC/CTPC contracts

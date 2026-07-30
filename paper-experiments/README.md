@@ -18,6 +18,9 @@ paper-experiments/
   metrics/
     Metric definitions and counting rules.
 
+  baselines/
+    External baseline tool references and version pins.
+
   raw/
     Placeholders for raw exported summaries copied from reproducible runs.
 
