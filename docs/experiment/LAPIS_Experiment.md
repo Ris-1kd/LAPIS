@@ -19,6 +19,7 @@ LAPIS 面向静态污点分析中的 under-propagation 问题，提出基于大�
 - RQ3：不同 LLM 后端是否影响 LAPIS 性能，框架是否具有模型鲁棒性？
 - RQ4：LAPIS 是否能够在真实世界项目中发现新的安全问题？
 
+
 ---
 
 # 2. Research Questions
@@ -37,6 +38,7 @@ LAPIS 面向静态污点分析中的 under-propagation 问题，提出基于大�
 - LAPIS 是否恢复 YASA 漏报漏洞；
 - LAPIS 是否能够恢复完整 source-to-sink 污点传播链。
 
+
 ---
 
 ## 数据集
@@ -47,21 +49,22 @@ LAPIS 面向静态污点分析中的 under-propagation 问题，提出基于大�
 
 约 100 个真实 CVE。
 
+
 来源：
 
 - CVE Database；
 - GitHub Security Advisory；
 
+
 数据分类：
 
-
-| Category         | Number |
-| ---------------- | ------ |
-| Connectivity Gap | 30     |
-| Propagation Gap  | 30     |
-| Mixed Gap        | 20     |
-| Safe Case        | 10     |
-| Total            | 100    |
+| Category | Number |
+|---|---:|
+| Connectivity Gap | 30 |
+| Propagation Gap | 30 |
+| Mixed Gap | 20 |
+| Safe Case | 10 |
+| Total | 100 |
 
 
 ---
@@ -71,6 +74,7 @@ LAPIS 面向静态污点分析中的 under-propagation 问题，提出基于大�
 ### YASA
 
 原始静态污点分析工具。
+
 
 ### Full LAPIS
 
@@ -92,6 +96,7 @@ Contract Injection
 Re-analysis
 ```
 
+
 ---
 
 ## 指标
@@ -103,36 +108,35 @@ Re-analysis
 - Complete Path Recovery；
 - False Positive。
 
+
 ---
 
 ## 表格设计
 
 ### Table 1 Dataset Statistics
 
-
-| Vulnerability Type | CWE     | Projects | CVEs | Connectivity Gap | Propagation Gap | Mixed Gap |
-| ------------------ | ------- | -------- | ---- | ---------------- | --------------- | --------- |
-| SQL Injection      | CWE-89  |          |      |                  |                 |           |
-| Command Injection  | CWE-78  |          |      |                  |                 |           |
-| Path Traversal     | CWE-22  |          |      |                  |                 |           |
-| Deserialization    | CWE-502 |          |      |                  |                 |           |
-| Total              | -       |          | 100  |                  |                 |           |
+| Vulnerability Type | CWE | Projects | CVEs | Connectivity Gap | Propagation Gap | Mixed Gap |
+|---|---|---:|---:|---:|---:|---:|
+| SQL Injection | CWE-89 | | | | | |
+| Command Injection | CWE-78 | | | | | |
+| Path Traversal | CWE-22 | | | | | |
+| Deserialization | CWE-502 | | | | | |
+| Total | - | |100| | | |
 
 
 ### Table 2 Overall Detection Results
-
 
 | Method | Detected CVEs | Recall | Precision | F1 | Path Recovery |
 |---|---:|---:|---:|---:|---:|
 | YASA | | | | | |
 | LAPIS | | | | | |
 
-
 # RQ2: Component Effectiveness and Ablation Study
 
 ## Research Question
 
 **RQ2: How much does each component contribute to LAPIS effectiveness?**
+
 
 ## 研究目标
 
@@ -143,6 +147,7 @@ Re-analysis
 - CTPC 是否恢复传播语义；
 - Validation 是否减少错误传播；
 - 分阶段修复是否提升复杂案例效果。
+
 
 ---
 
@@ -156,6 +161,7 @@ Re-analysis
 | w/o CCEC | Call-edge Contract |
 | w/o CTPC | Propagation Contract |
 | w/o Validation | Three-way Validation |
+| w/o Stage Repair | Staged Repair |
 
 
 ---
@@ -169,10 +175,10 @@ Re-analysis
 - False Positive；
 - LLM Calls。
 
+
 ---
 
 ## Table 3 Ablation Study
-
 
 | Configuration | Recall | Precision | F1 | Path Recovery | FP |
 |---|---:|---:|---:|---:|---:|
@@ -182,12 +188,12 @@ Re-analysis
 | w/o CTPC||||||
 | w/o Validation||||||
 
-
 # RQ3: Robustness across Different LLM Backends
 
 ## Research Question
 
 **RQ3: How does the choice of LLM backend affect LAPIS performance?**
+
 
 ## 研究目标
 
@@ -196,6 +202,7 @@ Re-analysis
 - LAPIS 是否依赖某一个特定 LLM；
 - 不同模型生成契约质量差异；
 - 静态证据和验证机制是否能够稳定约束不同模型。
+
 
 ---
 
@@ -207,14 +214,14 @@ Re-analysis
 
 20-30 个代表性案例。
 
+
 选择原则：
 
-
-| Gap Type         | Number |
-| ---------------- | ------ |
-| Connectivity Gap | 8-10   |
-| Propagation Gap  | 8-10   |
-| Mixed Gap        | 5-10   |
+| Gap Type | Number |
+|---|---:|
+| Connectivity Gap | 8-10 |
+| Propagation Gap | 8-10 |
+| Mixed Gap | 5-10 |
 
 
 保证：
@@ -223,16 +230,17 @@ Re-analysis
 - 不同项目；
 - 不同难度。
 
+
 ---
 
 ## LLM模型
 
 
-| Model    | Description |
-| -------- | ----------- |
-| GPT      | 高能力闭源模型     |
-| Gemini   | 不同厂商闭源模型    |
-| DeepSeek | 低成本推理模型     |
+| Model | Description |
+|---|---|
+| GPT | 高能力闭源模型 |
+| Gemini | 不同厂商闭源模型 |
+| DeepSeek | 低成本推理模型 |
 
 
 ---
@@ -247,6 +255,7 @@ Re-analysis
 - 相同 validation；
 - 相同输出格式。
 
+
 ---
 
 ## 指标
@@ -257,10 +266,10 @@ Re-analysis
 - Token Cost；
 - Latency。
 
+
 ---
 
 ## Table 4 LLM Backend Comparison
-
 
 | Model | Contract Accuracy | Triple Pass | Path Recovery | Cost |
 |---|---:|---:|---:|---:|
@@ -277,12 +286,14 @@ Re-analysis
 
 **RQ4: Can LAPIS discover security issues in previously unseen real-world projects?**
 
+
 ## 研究目标
 
 验证：
 
 - LAPIS 是否具有实际漏洞发现能力；
 - 是否能够应用于未参与 benchmark 的真实项目。
+
 
 ---
 
@@ -292,6 +303,7 @@ Re-analysis
 
 20-50 个真实开源项目。
 
+
 要求：
 
 - 未出现在 CVE Benchmark；
@@ -299,9 +311,11 @@ Re-analysis
 - Python项目；
 - 具有一定规模。
 
+
 ---
 
 ## 实验流程
+
 
 ```
 Real Project
@@ -324,18 +338,19 @@ Manual Validation
 
 ```
 
+
 ---
 
 ## 人工分类
 
 
-| Category                | Description |
-| ----------------------- | ----------- |
-| Confirmed Vulnerability | 已确认漏洞       |
-| Valid Risky Flow        | 有风险传播路径     |
-| Sanitized               | 已被安全机制阻断    |
-| False Positive          | 错误结果        |
-| Unknown                 | 无法确认        |
+| Category | Description |
+|---|---|
+| Confirmed Vulnerability | 已确认漏洞 |
+| Valid Risky Flow | 有风险传播路径 |
+| Sanitized | 已被安全机制阻断 |
+| False Positive | 错误结果 |
+| Unknown | 无法确认 |
 
 
 ---
@@ -353,20 +368,20 @@ Manual Validation
 - Precision；
 - False Positive。
 
+
 ---
 
 ## Table 5 Real-world Evaluation
 
-
-| Project   | LOC | YASA Findings | LAPIS Findings | Confirmed | FP  |
-| --------- | --- | ------------- | -------------- | --------- | --- |
-| Project A |     |               |                |           |     |
-| Project B |     |               |                |           |     |
-| Project C |     |               |                |           |     |
-| Total     |     |               |                |           |     |
-
+| Project | LOC | YASA Findings | LAPIS Findings | Confirmed | FP |
+|---|---:|---:|---:|---:|---:|
+| Project A||||||
+| Project B||||||
+| Project C||||||
+| Total||||||
 
 # 3. SANER Evaluation章节结构
+
 
 ```
 5 Evaluation
@@ -391,6 +406,7 @@ Real-world Vulnerability Discovery
 
 ```
 
+
 ---
 
 # 4. 正文推荐表格
@@ -404,12 +420,14 @@ Real-world Vulnerability Discovery
 5. LLM Backend Comparison
 6. Real-world Evaluation
 
+
 附录：
 
 - CVE详细结果；
 - Contract字段准确率；
 - Prompt；
 - LLM输出。
+
 
 ---
 
@@ -428,5 +446,6 @@ RQ3：
 
 RQ4：
 证明 LAPIS 是否具有真实应用价值。
+
 
 该结构更符合 SANER/ICSE/FSE 软件分析论文的实验组织方式。

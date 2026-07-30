@@ -1,14 +1,16 @@
 # Table 3 Ablation Study
 
-Values are placeholders until the final benchmark collection is complete.
+Values are placeholders until the final benchmark collection is complete. The
+main ablation uses only components that can be disabled independently in the
+pipeline. Stage ordering and ordered-trace rendering are reported in text or
+appendix diagnostics instead of being treated as standalone repair components.
 
-| Configuration | Removed Component | Recall | Precision | F1 | Path Recovery | False Positives | LLM Calls | Notes |
-|---|---|---|---|---|---|---|---|---|
-| Full LAPIS | None | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| w/o Evidence | Static Evidence | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| w/o CCEC | Call-edge Contract | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| w/o CTPC | Propagation Contract | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| w/o Validation | Three-way Validation | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
-| w/o Stage Repair | Staged Repair | TBD | TBD | TBD | TBD | TBD | TBD | TBD |
+| Configuration | Recall | Precision | F1 | Path Recovery | FP | Notes |
+|---|---:|---:|---:|---:|---:|---|
+| Full LAPIS | TBD | TBD | TBD | TBD | TBD | None removed |
+| w/o Evidence | TBD | TBD | TBD | TBD | TBD | Static evidence removed from LLM generation |
+| w/o CCEC | TBD | TBD | TBD | TBD | TBD | Call-edge contract disabled |
+| w/o CTPC | TBD | TBD | TBD | TBD | TBD | Propagation contract disabled |
+| w/o Validation | TBD | TBD | TBD | TBD | TBD | Three-way validation disabled |
 
 CSV source: `table3_ablation_study.csv`

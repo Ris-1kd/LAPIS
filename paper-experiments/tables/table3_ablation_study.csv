@@ -1,7 +1,6 @@
-configuration,removed_component,recall,precision,f1,path_recovery,false_positives,llm_calls,notes
-Full LAPIS,None,TBD,TBD,TBD,TBD,TBD,TBD,TBD
-w/o Evidence,Static Evidence,TBD,TBD,TBD,TBD,TBD,TBD,TBD
-w/o CCEC,Call-edge Contract,TBD,TBD,TBD,TBD,TBD,TBD,TBD
-w/o CTPC,Propagation Contract,TBD,TBD,TBD,TBD,TBD,TBD,TBD
-w/o Validation,Three-way Validation,TBD,TBD,TBD,TBD,TBD,TBD,TBD
-w/o Stage Repair,Staged Repair,TBD,TBD,TBD,TBD,TBD,TBD,TBD
+configuration,recall,precision,f1,path_recovery,fp,notes
+Full LAPIS,TBD,TBD,TBD,TBD,TBD,None removed
+w/o Evidence,TBD,TBD,TBD,TBD,TBD,Static evidence removed from LLM generation
+w/o CCEC,TBD,TBD,TBD,TBD,TBD,Call-edge contract disabled
+w/o CTPC,TBD,TBD,TBD,TBD,TBD,Propagation contract disabled
+w/o Validation,TBD,TBD,TBD,TBD,TBD,Three-way validation disabled

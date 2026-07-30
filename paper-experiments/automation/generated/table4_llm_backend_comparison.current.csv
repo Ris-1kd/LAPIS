@@ -1,0 +1,4 @@
+model,contract_accuracy,triple_pass,path_recovery,cost,notes
+gpt-5,0.86,1.00,1.00,TBD,OpenAI-compatible LLM API; current recorded backend
+gemini,not_run,not_run,not_run,TBD,Backend slot reserved for future RQ3 runs
+deepseek,not_run,not_run,not_run,TBD,Backend slot reserved for future RQ3 runs

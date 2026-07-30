@@ -1,3 +1,8 @@
 .lapis-llm.env
 .env
+__pycache__/
+*.py[cod]
+node_modules/
+logs/
 external-tools/YASA-Engine-upstream/
+paper-experiments/automation/backend-runs/

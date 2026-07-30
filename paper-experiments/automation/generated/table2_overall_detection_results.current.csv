@@ -1,0 +1,3 @@
+method,detected_cves,recall,precision,f1,path_recovery,notes
+YASA,0,0.00,TBD,TBD,0.00,Baseline report without CCEC/CTPC contracts
+LAPIS,5,1.00,TBD,TBD,1.00,Validated CCEC/CTPC contracts consumed during re-scan

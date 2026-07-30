@@ -93,9 +93,6 @@ def config_from_env(
     if not key:
         raise ValueError("set LAPIS_LLM_API_KEY or OPENAI_API_KEY, or create .lapis-llm.env")
     selected_model = model or os.environ.get("LAPIS_LLM_MODEL") or local_env.get("LAPIS_LLM_MODEL") or DEFAULT_LLM_MODEL
-    if selected_model not in SUPPORTED_LLM_MODELS:
-        supported = ", ".join(SUPPORTED_LLM_MODELS)
-        raise ValueError(f"unsupported LAPIS LLM model {selected_model!r}; choose one of: {supported}")
     return LLMConfig(
         api_key=key,
         base_url=(base_url or os.environ.get("LAPIS_LLM_BASE_URL") or local_env.get("LAPIS_LLM_BASE_URL") or DEFAULT_LLM_BASE_URL).rstrip("/"),

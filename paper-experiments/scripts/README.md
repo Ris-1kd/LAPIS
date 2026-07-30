@@ -1,7 +1,8 @@
 # Aggregation Scripts
 
-This directory is reserved for future scripts that convert reproducible
-experiment reports into paper table CSVs.
+The active paper-table automation now lives in
+`paper-experiments/automation/`. This directory is kept for future helper
+scripts that are not part of the main aggregation loop.
 
 Expected responsibilities:
 
@@ -10,5 +11,8 @@ Expected responsibilities:
 - verify ordered trace availability;
 - produce or update CSV files in `paper-experiments/tables/`.
 
-No aggregation script is committed yet because the final paper-scale dataset is
-still being collected.
+For the current small closed loop, use:
+
+```bash
+python3 paper-experiments/automation/aggregate_tables.py
+```

@@ -34,9 +34,9 @@ The table templates follow the current experiment design:
 
 | RQ | Purpose | Main Tables |
 |---|---|---|
-| RQ1 | Known-CVE effectiveness and path recovery | Table 1, Table 2 |
-| RQ2 | Component ablation | Table 3 |
-| RQ3 | LLM backend robustness | Table 4 |
+| RQ1 | Known-CVE detection and ordered path recovery | Table 1, Table 2 |
+| RQ2 | Core component ablation | Table 3 |
+| RQ3 | LLM backend robustness under the same evidence and validation constraints | Table 4 |
 | RQ4 | Real-world project evaluation | Table 5 |
 
 ## Data Policy
@@ -48,6 +48,12 @@ The table templates follow the current experiment design:
   definitions.
 - If a number is derived from a script, record the source report path and
   command in the relevant appendix CSV or raw index.
+- In Table 2, do not use raw `sinks` as a vulnerability count. `sinks` means
+  matched sink rule locations; `Detected CVEs` is counted from final case
+  status.
+- In Table 3, keep the main paper-facing metrics compact: recall, precision,
+  F1, path recovery, and false positives. Extra engineering diagnostics belong
+  in appendix tables or generated per-case details.
 
 ## Current Benchmark Cases
 

@@ -1,4 +1,4 @@
-model,provider,contract_accuracy,triple_pass_rate,path_recovery,token_cost,latency_seconds,notes
-GPT,TBD,TBD,TBD,TBD,TBD,TBD,TBD
-Gemini,TBD,TBD,TBD,TBD,TBD,TBD,TBD
-DeepSeek,TBD,TBD,TBD,TBD,TBD,TBD,TBD
+model,contract_accuracy,triple_pass,path_recovery,cost,notes
+GPT,TBD,TBD,TBD,TBD,TBD
+Gemini,TBD,TBD,TBD,TBD,TBD
+DeepSeek,TBD,TBD,TBD,TBD,TBD

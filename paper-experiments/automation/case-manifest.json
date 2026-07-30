@@ -1,0 +1,175 @@
+{
+  "schema_version": "lapis.paper_automation.v1",
+  "description": "Current small LAPIS validation slice. Values are derived from existing reports, not from hand-written reference traces.",
+  "cases": [
+    {
+      "case_id": "cve-2023-24816-ipython",
+      "project": "IPython",
+      "gap_type": "connectivity_gap",
+      "is_vulnerable": true,
+      "is_no_gap_control": false,
+      "requires_ccec": true,
+      "requires_ctpc": false,
+      "case_json": "LAPIS-Experiments/cases/connectivity_gap/cve-2023-24816-ipython/case.json",
+      "evidence_pack": "LAPIS-Experiments/reports/ipython-ccec/evidence/evidence_pack.json",
+      "evidence_gate": "LAPIS-Experiments/reports/ipython-ccec/evidence/evidence_gate_report.json",
+      "gap_diagnosis": "LAPIS-Experiments/reports/ipython-ccec/evidence/gap_diagnosis.json",
+      "baseline_report": "LAPIS-Experiments/reports/ipython-ccec/runs/baseline-benchmark/baseline-benchmark_full_cve_report.json",
+      "final_report": "LAPIS-Experiments/reports/ipython-ccec/runs/llm-auto-materialized-ccec-ordered-trace-v2/llm-auto-materialized-ccec-ordered-trace-v2_full_cve_report.json",
+      "ccec_file": "LAPIS-Experiments/reports/ipython-ccec/ccec/candidate_edges.llm.json",
+      "ccec_validation": "LAPIS-Experiments/reports/ipython-ccec/ccec/llm_validation_report.json",
+      "llm_runs": [
+        {
+          "model": "gpt-5",
+          "provider": "OpenAI-compatible LLM API",
+          "contract_files": [
+            "LAPIS-Experiments/reports/ipython-ccec/ccec/candidate_edges.llm.json"
+          ],
+          "validation_files": [
+            "LAPIS-Experiments/reports/ipython-ccec/ccec/llm_validation_report.json"
+          ],
+          "final_report": "LAPIS-Experiments/reports/ipython-ccec/runs/llm-auto-materialized-ccec-ordered-trace-v2/llm-auto-materialized-ccec-ordered-trace-v2_full_cve_report.json"
+        }
+      ]
+    },
+    {
+      "case_id": "cve-2024-27758-rpyc",
+      "project": "RPyC",
+      "gap_type": "connectivity_gap",
+      "is_vulnerable": true,
+      "is_no_gap_control": false,
+      "requires_ccec": true,
+      "requires_ctpc": false,
+      "case_json": "LAPIS-Experiments/cases/connectivity_gap/cve-2024-27758-rpyc/case.json",
+      "baseline_report": "LAPIS-Experiments/reports/rpyc-llm-auto-ccec/runs/baseline-materialized/baseline-materialized_full_cve_report.json",
+      "final_report": "LAPIS-Experiments/reports/rpyc-llm-auto-ccec/runs/materialized-llm-ccec-ordered-trace-v3/materialized-llm-ccec-ordered-trace-v3_full_cve_report.json",
+      "ccec_file": "LAPIS-Experiments/reports/rpyc-llm-auto-ccec/ccec/candidate_edges.llm.json",
+      "ccec_validation": "LAPIS-Experiments/reports/rpyc-llm-auto-ccec/ccec/llm_validation_report.json",
+      "llm_runs": [
+        {
+          "model": "gpt-5",
+          "provider": "OpenAI-compatible LLM API",
+          "contract_files": [
+            "LAPIS-Experiments/reports/rpyc-llm-auto-ccec/ccec/candidate_edges.llm.json"
+          ],
+          "validation_files": [
+            "LAPIS-Experiments/reports/rpyc-llm-auto-ccec/ccec/llm_validation_report.json"
+          ],
+          "final_report": "LAPIS-Experiments/reports/rpyc-llm-auto-ccec/runs/materialized-llm-ccec-ordered-trace-v3/materialized-llm-ccec-ordered-trace-v3_full_cve_report.json"
+        }
+      ]
+    },
+    {
+      "case_id": "cve-2024-36039-pymysql",
+      "project": "PyMySQL",
+      "gap_type": "propagation_gap",
+      "is_vulnerable": true,
+      "is_no_gap_control": false,
+      "requires_ccec": false,
+      "requires_ctpc": true,
+      "case_json": "LAPIS-Experiments/cases/propagation_gap/cve-2024-36039-pymysql/case.json",
+      "evidence_pack": "LAPIS-Experiments/reports/pymysql-llm-auto-ctpc-latest/evidence/evidence_pack.json",
+      "evidence_gate": "LAPIS-Experiments/reports/pymysql-llm-auto-ctpc-latest/evidence/evidence_gate_report.json",
+      "gap_diagnosis": "LAPIS-Experiments/reports/pymysql-llm-auto-ctpc-latest/evidence/gap_diagnosis.json",
+      "baseline_report": "LAPIS-Experiments/reports/pymysql-llm-auto-ctpc-latest/runs/baseline/baseline_full_cve_report.json",
+      "final_report": "LAPIS-Experiments/reports/pymysql-llm-auto-ctpc-latest/runs/llm-auto-ctpc-ordered-trace-cli/llm-auto-ctpc-ordered-trace-cli_full_cve_report.json",
+      "ctpc_file": "LAPIS-Experiments/reports/pymysql-llm-auto-ctpc-latest/ctpc/ctpc.llm.json",
+      "ctpc_validation": "LAPIS-Experiments/reports/pymysql-llm-auto-ctpc-latest/validation/validation_response.auto.json",
+      "llm_runs": [
+        {
+          "model": "gpt-5",
+          "provider": "OpenAI-compatible LLM API",
+          "contract_files": [
+            "LAPIS-Experiments/reports/pymysql-llm-auto-ctpc-latest/ctpc/ctpc.llm.json"
+          ],
+          "validation_files": [
+            "LAPIS-Experiments/reports/pymysql-llm-auto-ctpc-latest/validation/validation_response.auto.json"
+          ],
+          "final_report": "LAPIS-Experiments/reports/pymysql-llm-auto-ctpc-latest/runs/llm-auto-ctpc-ordered-trace-cli/llm-auto-ctpc-ordered-trace-cli_full_cve_report.json"
+        }
+      ]
+    },
+    {
+      "case_id": "cve-2026-24486-python-multipart",
+      "project": "python-multipart",
+      "gap_type": "mixed_gap",
+      "is_vulnerable": true,
+      "is_no_gap_control": false,
+      "requires_ccec": true,
+      "requires_ctpc": true,
+      "case_json": "LAPIS-Experiments/cases/mixed_case/cve-2026-24486-python-multipart/case.json",
+      "evidence_pack": "LAPIS-Experiments/reports/python-multipart-llm-auto-mixed-latest/evidence/evidence_pack.json",
+      "evidence_gate": "LAPIS-Experiments/reports/python-multipart-llm-auto-mixed-latest/evidence/evidence_gate_report.json",
+      "gap_diagnosis": "LAPIS-Experiments/reports/python-multipart-llm-auto-mixed-latest/evidence/gap_diagnosis.json",
+      "baseline_report": "LAPIS-Experiments/reports/python-multipart-llm-auto-mixed-latest/runs/baseline/baseline_full_cve_report.json",
+      "final_report": "LAPIS-Experiments/reports/python-multipart-llm-auto-mixed-latest/runs/final-ccec-ctpc/final-ccec-ctpc_full_cve_report.json",
+      "ccec_file": "LAPIS-Experiments/reports/python-multipart-llm-auto-mixed-latest/ccec/candidate_edges.llm.json",
+      "ccec_validation": "LAPIS-Experiments/reports/python-multipart-llm-auto-mixed-latest/ccec/llm_validation_report.json",
+      "ctpc_file": "LAPIS-Experiments/reports/python-multipart-llm-auto-mixed-latest/ctpc/ctpc.llm.json",
+      "ctpc_validation": "LAPIS-Experiments/reports/python-multipart-llm-auto-mixed-latest/validation/validation_response.auto.json",
+      "llm_runs": [
+        {
+          "model": "gpt-5",
+          "provider": "OpenAI-compatible LLM API",
+          "contract_files": [
+            "LAPIS-Experiments/reports/python-multipart-llm-auto-mixed-latest/ccec/candidate_edges.llm.json",
+            "LAPIS-Experiments/reports/python-multipart-llm-auto-mixed-latest/ctpc/ctpc.llm.json"
+          ],
+          "validation_files": [
+            "LAPIS-Experiments/reports/python-multipart-llm-auto-mixed-latest/ccec/llm_validation_report.json",
+            "LAPIS-Experiments/reports/python-multipart-llm-auto-mixed-latest/validation/validation_response.auto.json"
+          ],
+          "final_report": "LAPIS-Experiments/reports/python-multipart-llm-auto-mixed-latest/runs/final-ccec-ctpc/final-ccec-ctpc_full_cve_report.json"
+        }
+      ]
+    },
+    {
+      "case_id": "cve-2025-55156-pyload",
+      "project": "pyLoad",
+      "gap_type": "mixed_gap",
+      "is_vulnerable": true,
+      "is_no_gap_control": false,
+      "requires_ccec": true,
+      "requires_ctpc": true,
+      "case_json": "LAPIS-Experiments/cases/mixed_case/cve-2025-55156-pyload/case.json",
+      "evidence_pack": "LAPIS-Experiments/reports/pyload-llm-auto-mixed-latest/evidence/evidence_pack.json",
+      "evidence_gate": "LAPIS-Experiments/reports/pyload-llm-auto-mixed-latest/evidence/evidence_gate_report.json",
+      "gap_diagnosis": "LAPIS-Experiments/reports/pyload-llm-auto-mixed-latest/evidence/gap_diagnosis.json",
+      "baseline_report": "LAPIS-Experiments/reports/pyload-llm-auto-mixed-latest/runs/baseline/baseline_full_cve_report.json",
+      "final_report": "LAPIS-Experiments/reports/pyload-llm-auto-mixed-latest/runs/final-ccec-ctpc-clean-trace/final-ccec-ctpc-clean-trace_full_cve_report.json",
+      "ccec_file": "LAPIS-Experiments/reports/pyload-llm-auto-mixed-latest/ccec/candidate_edges.llm.json",
+      "ccec_validation": "LAPIS-Experiments/reports/pyload-llm-auto-mixed-latest/ccec/llm_validation_report.json",
+      "ctpc_file": "LAPIS-Experiments/reports/pyload-llm-auto-mixed-latest/ctpc/ctpc.llm.json",
+      "llm_runs": [
+        {
+          "model": "gpt-5",
+          "provider": "OpenAI-compatible LLM API",
+          "contract_files": [
+            "LAPIS-Experiments/reports/pyload-llm-auto-mixed-latest/ccec/candidate_edges.llm.json",
+            "LAPIS-Experiments/reports/pyload-llm-auto-mixed-latest/ctpc/ctpc.llm.json"
+          ],
+          "validation_files": [
+            "LAPIS-Experiments/reports/pyload-llm-auto-mixed-latest/ccec/llm_validation_report.json"
+          ],
+          "final_report": "LAPIS-Experiments/reports/pyload-llm-auto-mixed-latest/runs/final-ccec-ctpc-clean-trace/final-ccec-ctpc-clean-trace_full_cve_report.json"
+        }
+      ]
+    },
+    {
+      "case_id": "cve-2023-4033-mlflow",
+      "project": "MLflow",
+      "gap_type": "no_gap_control",
+      "is_vulnerable": true,
+      "is_no_gap_control": true,
+      "requires_ccec": false,
+      "requires_ctpc": false,
+      "case_json": "LAPIS-Experiments/cases/control/cve-2023-4033-mlflow/case.json",
+      "evidence_pack": "LAPIS-Experiments/reports/mlflow-control-latest/evidence/evidence_pack.json",
+      "evidence_gate": "LAPIS-Experiments/reports/mlflow-control-latest/evidence/evidence_gate_report.json",
+      "gap_diagnosis": "LAPIS-Experiments/reports/mlflow-control-latest/evidence/gap_diagnosis.json",
+      "baseline_report": "LAPIS-Experiments/reports/mlflow-control-latest/runs/baseline-after-entrypoint-fallback/baseline-after-entrypoint-fallback_full_cve_report.json",
+      "final_report": "LAPIS-Experiments/reports/mlflow-control-latest/runs/baseline-after-entrypoint-fallback/baseline-after-entrypoint-fallback_full_cve_report.json",
+      "llm_runs": []
+    }
+  ]
+}

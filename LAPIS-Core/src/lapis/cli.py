@@ -26,7 +26,6 @@ from .gate import build_evidence_gate_report, summarize_callgraph
 from .llm import (
     DEFAULT_LLM_BASE_URL,
     DEFAULT_LLM_MODEL,
-    SUPPORTED_LLM_MODELS,
     chat_json,
     chat_text,
     config_from_env,
@@ -68,9 +67,8 @@ def _add_llm_args(parser: argparse.ArgumentParser, *, max_tokens: int = 4096) ->
     parser.add_argument("--base-url", default=None, help=f"OpenAI-compatible base URL (default: {DEFAULT_LLM_BASE_URL})")
     parser.add_argument(
         "--model",
-        choices=SUPPORTED_LLM_MODELS,
         default=None,
-        help=f"LLM model name (default: {DEFAULT_LLM_MODEL})",
+        help=f"LLM model name for the OpenAI-compatible backend (default: {DEFAULT_LLM_MODEL})",
     )
     parser.add_argument("--api-key-stdin", action="store_true", help="Read API key from stdin instead of env")
     parser.add_argument("--llm-timeout-seconds", default=120, type=int, help="LLM API timeout")

@@ -1,0 +1,32 @@
+{
+  "schema_version": "lapis.llm_backends.v1",
+  "backends": [
+    {
+      "name": "gpt5",
+      "provider": "OpenAI-compatible LLM API",
+      "base_url": "https://llm-api.net/v1",
+      "model": "gpt-5",
+      "api_key_env": "LAPIS_LLM_API_KEY",
+      "timeout_seconds": 120,
+      "max_tokens": 8192
+    },
+    {
+      "name": "gemini",
+      "provider": "OpenAI-compatible Gemini gateway",
+      "base_url": "https://example-gemini-compatible/v1",
+      "model": "gemini-model-name",
+      "api_key_env": "GEMINI_API_KEY",
+      "timeout_seconds": 120,
+      "max_tokens": 8192
+    },
+    {
+      "name": "deepseek",
+      "provider": "OpenAI-compatible DeepSeek gateway",
+      "base_url": "https://api.deepseek.com/v1",
+      "model": "deepseek-chat",
+      "api_key_env": "DEEPSEEK_API_KEY",
+      "timeout_seconds": 120,
+      "max_tokens": 8192
+    }
+  ]
+}
