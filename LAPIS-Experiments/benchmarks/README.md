@@ -31,6 +31,14 @@ benchmarks/
       rules/
       manifest.json
       README.md
+
+  no_gap_control/
+    <case_id>/
+      source/
+      poc/
+      rules/
+      manifest.json
+      README.md
 ```
 
 ## Directory Meaning
@@ -65,6 +73,10 @@ propagation_gap
 mixed_case
   Both call graph connectivity and data propagation are missing. Repair order:
   CCEC first, then CTPC if the taint path is still broken.
+
+no_gap_control
+  Baseline YASA already reports the expected source-to-sink flow. Repair branch:
+  no repair. These cases verify that LAPIS does not force unnecessary repair.
 ```
 
 ## Included Cases
@@ -75,6 +87,8 @@ mixed_case
 | `connectivity_gap` | `cve-2023-24816-ipython` | CCEC | LLM materializes a rebound `_set_term_title` edge; YASA reports a complete trace without CTPC. |
 | `propagation_gap` | `cve-2024-36039-pymysql` | CTPC | Candidates must be inferred from baseline facts. |
 | `mixed_case` | `cve-2026-24486-python-multipart` | CCEC then CTPC | Candidates must be inferred from baseline facts. |
+| `mixed_case` | `cve-2025-55156-pyload` | CCEC then CTPC | CCEC exposes the receiver method body; CTPC closes tuple/generator/string propagation. |
+| `no_gap_control` | `cve-2023-4033-mlflow` | no repair | Correct-detection control; baseline YASA already reports the sink. |
 
 ## Upload Checklist
 

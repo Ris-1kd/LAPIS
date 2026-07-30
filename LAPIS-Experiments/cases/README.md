@@ -20,7 +20,8 @@ mixed_case/
   connectivity_gap 补 CCEC，重跑后若仍存在 propagation_gap，再确认混合缺口。
 
 control/
-  对照组。baseline 已经完整命中，不进入修复流程。
+  对照组。baseline 已经完整命中，不进入修复流程。对应 benchmark 放在
+  `../benchmarks/no_gap_control/`。
 ```
 
 ## 当前 Case
@@ -144,5 +145,14 @@ cases/
 {
   "dataset_dir": "../../benchmarks/mixed_case/cve-2026-24486-python-multipart/source",
   "rule_file": "../../benchmarks/mixed_case/cve-2026-24486-python-multipart/rules/final-sink-only.json"
+}
+```
+
+Control case 使用 `no_gap_control` benchmark 分类，例如：
+
+```json
+{
+  "dataset_dir": "../../../benchmarks/no_gap_control/cve-2023-4033-mlflow/source",
+  "rule_file": "../../../benchmarks/no_gap_control/cve-2023-4033-mlflow/rules/final-sink-only.json"
 }
 ```
