@@ -16,7 +16,34 @@
 CCEC: Conditional Call Edge Contract
 ```
 
-YASA 仍作为黑盒分析器使用。外部 repair pipeline 负责候选边生成、排序和验证；只有通过验证的边才进入 repaired graph，必要时再回灌 YASA 复验。
+当前工程中，YASA 不再只是完全黑盒。LAPIS 将验证后的 CCEC 作为
+`--ccec-file` 传给修改版 `LAPIS-Tool`，由工具内部真实消费：
+
+```text
+LAPIS-Core:
+  生成 / 验证 / 传入 CCEC，并汇总 contract consumption diagnostics。
+
+LAPIS-Tool:
+  在 Python analyzer 中匹配 CCEC callsite，把调用指向 materialized target；
+  在 taint checker 中处理 CCEC boundary / virtual sink，并输出诊断。
+```
+
+关键实现：
+
+```text
+LAPIS-Tool/src/engine/analyzer/python/common/python-analyzer.ts
+  materialized CCEC call edge matching
+  lapis-ccec-materialized-diagnostics.jsonl
+
+LAPIS-Tool/src/checker/taint/python/lapis-ccec.ts
+  CCEC boundary / virtual sink consumption
+  lapis-ccec-diagnostics.jsonl
+
+LAPIS-Core/src/lapis/yasa_runner.py
+  summarize_contract_consumption()
+  render_reconstructed_ccec_chain_lines()
+  render_ordered_source_to_sink_chain_lines()
+```
 
 ## 2. 总体流程
 
@@ -43,18 +70,59 @@ YASA 仍作为黑盒分析器使用。外部 repair pipeline 负责候选边生�
    easy 由规则生成唯一候选边；middle 由规则生成 Top-K 或 LLM rerank；
    hard 由 LLM 在候选空间内提出/排序候选边。
 
-8. 生成 CCEC
-   将已选择的候选边 materialize 为结构化 CCEC。
+8. LLM 生成 CCEC
+   `llm-generate-ccec` 基于 case/gate/diagnosis 调用 LLM API，
+   输出 `candidate_edges.llm.json`。
 
-9. 生成 CCEC validation artifacts
-   参考 LAPIS CTPC：候选契约本体不内嵌三分样例；验证器基于 CCEC 生成
-   must-link / must-not-link / must-kill 样例和 validation report。
+9. 结构验证 / 三分验证
+   `validate-ccec-candidates` 检查候选边结构；
+   对需要三分验证的 case，可生成 must-link / must-not-link / must-kill
+   validation contract。
 
-10. 接受 verified 边并更新 repaired graph
-   若 frontier 前进或 source-sink 连通，则继续验证；否则尝试下一候选。
+10. YASA 真实消费
+   `run-yasa-case --ccec-file ...` 将 CCEC 交给 `LAPIS-Tool`。
+   成功消费时报告中出现：
+
+   ```text
+   ccec_status=materialized_call_edge_consumed
+   ccec_materialized_matches>0
+   ```
 
 11. 迭代或停止
-   成功打通、无候选、无进展、证据不足、预算耗尽时停止。
+   如果 CCEC 后仍是 `ccec_callgraph_closed_taint_open` 或 `needs_ctpc=true`，
+   说明调用边已闭合但传播 fact 不完整，需要进入 CTPC。
+   如果 `reported/finding` 且 ordered trace 完整，则闭环完成。
+```
+
+## 2.1 当前已验证 CCEC Case
+
+| CVE | 项目 | 类型 | baseline | CCEC 后结果 | 是否需要 CTPC |
+|---|---|---|---|---|---|
+| CVE-2023-24816 | IPython | connectivity_gap | `finding=0` | `reported/finding=1` | 否 |
+| CVE-2024-27758 | RPyC | connectivity_gap | `finding=0` | `reported/finding>0` | 否，最新闭环以 CCEC 为主 |
+| CVE-2026-24486 | python-multipart | mixed_case | `finding=0` | CCEC 后仍 `finding=0` | 是 |
+| CVE-2025-55156 | pyLoad | mixed_case | `finding=0` | CCEC 后仍 `finding=0` | 是 |
+
+最新产物路径：
+
+```text
+LAPIS-Experiments/reports/ipython-ccec/ccec/candidate_edges.llm.json
+LAPIS-Experiments/reports/rpyc-llm-auto-ccec/ccec/candidate_edges.llm.json
+LAPIS-Experiments/reports/python-multipart-llm-auto-mixed-latest/ccec/candidate_edges.llm.json
+LAPIS-Experiments/reports/pyload-llm-auto-mixed-latest/ccec/candidate_edges.llm.json
+```
+
+复扫命令形态：
+
+```bash
+PYTHONPATH=LAPIS-Core/src python3 -m lapis run-yasa-case \
+  --tool-dir LAPIS-Tool \
+  --case LAPIS-Experiments/cases/connectivity_gap/cve-2023-24816-ipython/case.json \
+  --out-dir LAPIS-Experiments/reports/reproduce-ipython/final-ccec \
+  --uast-sdk-path /path/to/YASA-Engine-upstream/uast4py-linux-amd64 \
+  --label final-ccec \
+  --timeout-seconds 180 \
+  --ccec-file LAPIS-Experiments/reports/ipython-ccec/ccec/candidate_edges.llm.json
 ```
 
 ## 3. Source Forward Frontier

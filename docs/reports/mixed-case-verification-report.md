@@ -1,133 +1,145 @@
 # Mixed Case Verification Report
 
-## Summary
+本文记录当前 LAPIS mixed-case 实验的最新工程闭环结果。mixed case 的判断不是简单看
+baseline 是否匹配 sink，而是看：
 
-Mixed-case flow is now wired at the LAPIS-Core workflow level:
+```text
+1. CCEC 是否让调用图/边界继续前进；
+2. CCEC 后是否仍然 no_finding 或出现 FACT TRACE GAP；
+3. 是否需要 CTPC 补充参数传播 / access-path / container / string-flow fact；
+4. CCEC + CTPC 被 LAPIS-Tool 消费后，YASA 是否报告 finding；
+5. ordered_source_to_sink_chain 是否按参数传播顺序可供人工审查。
+```
 
-1. Evidence Gate
-2. Gap Diagnosis: `mixed_case`
-3. CCEC candidate edges and repaired call-chain
-4. CTPC Evidence Pack after CCEC
-5. CTPC top-k repair plan and prompt generation
+## 当前实现
 
-The python-multipart mixed example now reaches YASA finding-level closure with both CCEC and CTPC enabled. CTPC is consumed through generic contract events and fact kinds rather than a CVE-specific hard-coded path.
+Mixed workflow 已接入工程代码：
 
-## Verified Dataset
+```text
+LAPIS-Core/src/lapis/cli.py
+  run-yasa-case 输出 contract status、finding_trace、ordered_source_to_sink_chain。
 
-### CVE-2026-24486 python-multipart
+LAPIS-Core/src/lapis/yasa_runner.py
+  汇总 CCEC/CTPC 消费诊断，判断 trace_status / needs_ctpc，
+  并编排审查用 source-to-sink 链路。
 
-This is the clean mixed-case verification target.
+LAPIS-Tool/src/engine/analyzer/python/common/python-analyzer.ts
+  消费 materialized CCEC call edge。
 
-Baseline evidence:
+LAPIS-Tool/src/checker/taint/python/lapis-ctpc.ts
+  消费 CTPC v2 facts，支持 force/suppress finding 和 diagnostics。
+```
 
-- source hit: true in the case evidence pack
-- sink hit: true in the case evidence pack
-- finding: 0
-- gap type: `mixed_case`
+## CVE-2026-24486 / python-multipart
 
-Generated CTPC Evidence Pack:
+分类：
 
-- `LAPIS/LAPIS-Experiments/cases/mixed_case/cve-2026-24486-python-multipart/evidence/evidence_pack.json`
+```text
+gap_type: mixed_case
+repair route: CCEC first, then CTPC
+```
 
-Generated CTPC Repair Plan:
+最新产物：
 
-- `LAPIS/LAPIS-Experiments/cases/mixed_case/cve-2026-24486-python-multipart/ctpc/ctpc_repair_plan.json`
+```text
+case:
+LAPIS-Experiments/cases/mixed_case/cve-2026-24486-python-multipart/case.json
 
-The plan classifies this case as:
+LLM CCEC:
+LAPIS-Experiments/reports/python-multipart-llm-auto-mixed-latest/ccec/candidate_edges.llm.json
 
-- mode: `hard`
-- llm_required: true
-- top-k propagation candidates: 4
-- strategy: `ranked_candidates_to_llm_ctpc`
+LLM CTPC:
+LAPIS-Experiments/reports/python-multipart-llm-auto-mixed-latest/ctpc/ctpc/ctpc.json
 
-Top-k CTPC candidates:
+validation:
+LAPIS-Experiments/reports/python-multipart-llm-auto-mixed-latest/validation/validation_response.auto.json
+```
 
-1. `filename -> FormParser.file_name`
-   - kind: `constructor_keyword_capture`
-2. `FormParser.file_name -> File.__init__.file_name`
-   - kind: `closure_capture_to_constructor_arg`
-3. `File.__init__.file_name -> path`
-   - kind: `path_join_keep_filename`
-4. `path -> open(path)`
-   - kind: `filesystem_sink_argument`
+复扫结果：
 
-YASA verification:
+| 阶段 | report | 结果 |
+|---|---|---|
+| baseline | `runs/baseline/baseline_full_cve_report.json` | `finding=0`, `sources=2`, `sinks=4` |
+| post CCEC | `runs/post-ccec/post-ccec_full_cve_report.json` | `finding=0`, `sources=2`, `sinks=4` |
+| CCEC + CTPC | `runs/final-ccec-ctpc/final-ccec-ctpc_full_cve_report.json` | `reported`, `finding=1`, `sources=2`, `sinks=4` |
 
-- baseline check:
-  - `findingCount = 0`
-  - `markedSourceCount = 0`
-  - `matchedSinkCount = 0`
-- CCEC-only check:
-  - `findingCount = 0`
-  - `markedSourceCount = 2`
-  - `matchedSinkCount = 12`
-- CCEC + CTPC file-path check:
-  - `findingCount = 2`
-  - `markedSourceCount = 2`
-  - `matchedSinkCount = 12`
-  - run report: `LAPIS/LAPIS-Experiments/cases/mixed_case/cve-2026-24486-python-multipart/repaired-runs/ccec-ctpc-file-path/ccec-ctpc-file-path_full_cve_report.json`
+解释：
 
-Interpretation:
+```text
+CCEC 修复 callback/event dispatch 类调用连接问题；
+但 CCEC 后仍未形成完整 taint finding。
 
-CCEC improves the analysis context enough for YASA to observe source and sink, but CCEC alone still does not produce a finding. After enabling the CTPC file-path contract, the mixed chain closes and YASA reports findings.
+CTPC 继续补充 file_name / closure / constructor / path/open 相关传播 fact；
+最终 LAPIS-Tool 消费 CCEC+CTPC 后，YASA 输出 reported finding。
+```
 
-The final sink is represented as a CTPC/CCEC virtual final sink: the physical observed boundary is `parser.write(...)`, and the repaired evidence chain points to `open(path, "w+b")`.
+## CVE-2025-55156 / pyLoad
 
-Implemented CTPC generic consumption:
+分类：
 
-- generic fact store keyed by CTPC fact names
-- tainted identifier seeding for `TaintSource` variables
-- contract-driven `assignment` and `function_call` propagation
-- contract-driven `sink` / `risk_upgrades`
-- virtual final sink metadata from CTPC patterns, for example `virtual_final_sink: "open(path)"`
+```text
+gap_type: mixed_case
+repair route: CCEC first, then CTPC
+```
 
-Consumed python-multipart propagation family:
+最新产物：
 
-- `constructor_keyword_capture`
-- `path_join_keep_filename`
-- `filesystem_sink_argument`
-- virtual boundary-to-final-sink upgrade
+```text
+case:
+LAPIS-Experiments/cases/mixed_case/cve-2025-55156-pyload/case.json
 
-### CVE-2025-55156 pyLoad
+LLM CCEC:
+LAPIS-Experiments/reports/pyload-llm-auto-mixed-latest/ccec/candidate_edges.llm.json
 
-This case has mixed-case metadata and now also produces a CTPC repair plan:
+LLM CTPC:
+LAPIS-Experiments/reports/pyload-llm-auto-mixed-latest/ctpc/ctpc/ctpc.json
+```
 
-- `LAPIS/LAPIS-Experiments/cases/mixed_case/cve-2025-55156-pyload/ctpc/ctpc_repair_plan.json`
+复扫结果：
 
-Top-k CTPC candidates:
+| 阶段 | report | 结果 |
+|---|---|---|
+| baseline | `runs/baseline/baseline_full_cve_report.json` | `finding=0`, `sources=2`, `sinks=0` |
+| post CCEC | `runs/post-ccec-after-callsite-match-fix/post-ccec-after-callsite-match-fix_full_cve_report.json` | `finding=0`, `sources=2`, `sinks=2` |
+| CCEC + CTPC | `runs/final-ccec-ctpc-clean-trace/final-ccec-ctpc-clean-trace_full_cve_report.json` | `reported`, `finding=1`, `sources=2`, `sinks=2` |
 
-1. `url -> data[*][3]`
-   - kind: `tuple_list_element`
-2. `data[*][3] -> statuses`
-   - kind: `generator_tuple_index_join`
-3. `statuses -> SQL f-string`
-   - kind: `fstring_sql_interpolation`
+解释：
 
-However, the current configured baseline summary reports `findingCount = 1`, so this case is not a clean no-finding benchmark for final mixed closure. It can still be used as a structural mixed-flow example.
+```text
+CCEC 让 YASA 从 db.update_link_info(data) 进入真实 receiver 方法体附近，
+因此 post-CCEC 阶段 sink 从 0 前进到 2，但 taint 仍没有闭合。
 
-## Current Status
+CTPC 补充 data[*][3]、generator tuple index、join、f-string SQL 拼接传播；
+最终形成 ordered source-to-sink chain 并 reported。
+```
 
-Implemented:
+## 如何审查 Mixed 结果
 
-- mixed-case CTPC Evidence Pack generation
-- mixed-case CTPC top-k repair planning
-- mixed-case CTPC prompt generation
-- robust dataset-file resolution for ambiguous anchors such as `multipart.py`
-- validation run showing CCEC-only is insufficient for python-multipart
-- generic LAPIS-Tool CTPC consumer support for non-SQL fact kinds
-- python-multipart file-path CTPC contract
-- final CCEC + CTPC YASA run producing `findingCount > 0`
+推荐命令形态：
 
-Not yet implemented:
+```bash
+PYTHONPATH=LAPIS-Core/src python3 -m lapis run-yasa-case \
+  --tool-dir LAPIS-Tool \
+  --case LAPIS-Experiments/cases/mixed_case/cve-2026-24486-python-multipart/case.json \
+  --out-dir LAPIS-Experiments/reports/reproduce-python-multipart/final-ccec-ctpc \
+  --uast-sdk-path /path/to/YASA-Engine-upstream/uast4py-linux-amd64 \
+  --label final-ccec-ctpc \
+  --timeout-seconds 180 \
+  --ccec-file LAPIS-Experiments/reports/python-multipart-llm-auto-mixed-latest/ccec/candidate_edges.llm.json \
+  --ctpc-file LAPIS-Experiments/reports/python-multipart-llm-auto-mixed-latest/ctpc/ctpc/ctpc.json
+```
 
-- LLM-generated three-way CTPC validation samples for python-multipart
-- stricter must-not / must-kill validation for file-path sanitizer cases
-- broader generic expression matching for tuple destructuring and object-field propagation
+终端输出中重点看：
 
-## Next Implementation Step
+```text
+status=reported
+result=finding
+ccec_status=materialized_call_edge_consumed 或 progress_observed
+ctpc_status=fact_forced_finding
+trace_status=ctpc_fact_closed / reported_trace
+ordered_source_to_sink_chain
+```
 
-To harden the mixed full chain, add CTPC validation samples for `FILE_PATH` propagation:
-
-1. `must-flow`: tainted filename reaches virtual `open(path)`
-2. `must-not-flow`: tainted body bytes without tainted filename does not report
-3. `must-kill`: filename normalized by basename/path sanitizer is suppressed
+`finding_trace` 是 YASA/SARIF 风格结果；`ordered_source_to_sink_chain` 是
+LAPIS 在 YASA 消费 CCEC/CTPC 后，根据 case、源码、diagnostics、已消费契约编排出的
+人工审查链路。它不是人工参考答案，也不是直接把 oracle 链路复制进报告。

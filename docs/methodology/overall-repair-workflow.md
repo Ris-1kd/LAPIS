@@ -31,6 +31,51 @@ evidence-supported candidate false negative
 
 只有在 CVE benchmark 中，借助 PoC、patch、advisory 或人工 oracle，才可以标注为真实 FN。
 
+## 当前工程实现状态
+
+LAPIS 当前已经实现了从 baseline 到修复复扫的闭环，不再只是方案文档：
+
+```text
+1. run-yasa-case
+   调用 LAPIS-Tool 跑原始或增强 YASA scan，输出 summary / SARIF / trace。
+
+2. build-evidence / evidence-gate / diagnose-gap
+   从 case、baseline artifacts 和静态源码中构造证据包，判断是否进入修复，
+   并路由到 connectivity_gap / propagation_gap / mixed_case / control。
+
+3. llm-generate-ccec / llm-generate-ctpc
+   调用配置的 OpenAI-compatible LLM API，基于 evidence 自动生成 CCEC 或 CTPC。
+
+4. validate-ccec-candidates / llm-generate-validation / validate-ctpc
+   对 CCEC 做结构验证，对 CTPC 做 must-flow / must-not-flow / must-kill 三分验证。
+
+5. run-yasa-case --ccec-file / --ctpc-file
+   将契约交给 LAPIS-Tool 真实消费，并输出 finding_trace、
+   ordered_source_to_sink_chain、contract consumption status。
+```
+
+关键实现文件：
+
+```text
+LAPIS-Core/src/lapis/cli.py
+LAPIS-Core/src/lapis/yasa_runner.py
+LAPIS-Tool/src/engine/analyzer/python/common/python-analyzer.ts
+LAPIS-Tool/src/checker/taint/python/lapis-ccec.ts
+LAPIS-Tool/src/checker/taint/python/lapis-ctpc.ts
+```
+
+`run-yasa-case` 当前终端输出会包含：
+
+```text
+status / result / findings / sources / sinks
+trace_status / needs_ctpc / needs_trace_review
+ccec_status / ccec_materialized_matches / ccec_checker_matches
+ctpc_status / ctpc_forced_findings
+finding_trace
+ordered_source_to_sink_chain
+reconstructed_ccec_chain
+```
+
 ## Step 1：Evidence Gate
 
 Evidence Gate 是证据门控。它位于所有修复之前，用来判断：
@@ -142,7 +187,7 @@ Evidence Gate 输出五类：
 
 通过 Evidence Gate 后，系统判断该 candidate FN 属于哪类欠传播。
 
-具体 CVE benchmark 的三类样本矩阵见：[CVE_DATASET_CASE_MATRIX.md](/home/ubuntu/llm-yasa-repair/CVE_DATASET_CASE_MATRIX.md)。
+具体 CVE benchmark 的三类样本矩阵见：[CVE Dataset Case Matrix](../datasets/cve-dataset-case-matrix.md)。
 
 ### 2.1 三类断链
 
@@ -220,7 +265,44 @@ sink(query)
 先恢复调用连接性，才能更可靠地判断是否仍缺传播语义。
 ```
 
-### 2.5 诊断输出
+### 2.5 CCEC 后是否继续 CTPC
+
+不能只用“是否已经 reported finding”作为是否继续 CTPC 的判断。当前实现还检查
+YASA/SARIF trace 和 LAPIS diagnostics：
+
+```text
+trace_status = actual_taint_trace
+  YASA 已有真实 source-to-boundary trace，通常不需要 CTPC。
+
+trace_status = reported_trace
+  YASA 已报告普通 finding，但仍需人工检查 trace 是否完整。
+
+trace_status = ccec_callgraph_closed_taint_open
+  CCEC 已让调用图到达虚拟/边界 sink，但 SARIF 中出现 FACT TRACE GAP，
+  表示调用边闭合而 taint fact 仍未闭合，需要继续 CTPC。
+
+trace_status = ctpc_fact_closed
+  CTPC fact 已被 LAPIS-Tool 消费，source-to-sink 链路按参数传播顺序可重建。
+
+trace_status = no_finding_trace
+  没有 finding trace。
+```
+
+对应布尔输出：
+
+```text
+needs_ctpc=true
+  通常表示 CCEC 消费后仍存在 FACT TRACE GAP。
+
+needs_trace_review=true
+  表示 finding 依赖虚拟边界或补充 fact，应该人工检查 ordered_source_to_sink_chain。
+```
+
+这个判断不是直接来自 YASA 的单一字段，而是由 `LAPIS-Core/src/lapis/yasa_runner.py`
+综合 SARIF `sinkAttribute`、trace 标签、`lapis-ccec-*.jsonl` 和
+`lapis-ctpc-diagnostics.jsonl` 得出。
+
+### 2.6 诊断输出
 
 ```json
 {

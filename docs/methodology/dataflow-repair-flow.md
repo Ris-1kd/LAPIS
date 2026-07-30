@@ -37,6 +37,38 @@ CTPC: Conditional Taint Propagation Contract
 Evidence Pack -> CTPC -> validation samples -> validation report -> accepted/rejected/inconclusive
 ```
 
+当前工程已经把 CTPC 接入到修改版 YASA：
+
+```text
+LAPIS-Core:
+  llm-generate-ctpc
+  llm-generate-validation
+  validate-ctpc
+  run-yasa-case --ctpc-file
+
+LAPIS-Tool:
+  读取 CTPC v2
+  记录 identifier / assignment / binary operation / function call facts
+  按 CTPC propagation_edges / function_summaries / risk_upgrades / kill_conditions
+  推导 fact
+  在 sink 或 virtual final sink 处 force / suppress finding
+```
+
+关键诊断文件：
+
+```text
+lapis-ctpc-diagnostics.jsonl
+```
+
+关键终端状态：
+
+```text
+ctpc_status=fact_forced_finding
+ctpc_forced_findings>0
+trace_status=ctpc_fact_closed
+ordered_source_to_sink_chain
+```
+
 ## 3. 总体流程
 
 ```text
@@ -59,13 +91,49 @@ Evidence Pack -> CTPC -> validation samples -> validation report -> accepted/rej
    根据 CTPC 生成 must-flow、must-not-flow、must-kill 三类样例。
 
 7. 运行 validation
-   先结构模拟验证；可选再运行 YASA baseline/enhanced 双运行验证。
+   `llm-generate-validation` 自动生成 must-flow / must-not-flow / must-kill；
+   `validate-ctpc` 做结构验证，必要时再用 YASA validation 复验。
 
 8. 输出 validation_report
    给出 accepted / rejected / inconclusive，并输出 edge coverage 和 feedback。
 
 9. 接受并回灌
-   accepted CTPC 可进入契约库或作为增强规则输入，之后重新跑原始 case。
+   accepted CTPC 通过 `run-yasa-case --ctpc-file ...` 交给 `LAPIS-Tool`
+   真实消费，之后重新跑原始 case。
+
+10. 输出审查链路
+    `finding_trace` 保留 YASA/SARIF finding 样式；
+    `ordered_source_to_sink_chain` 由 case、源码扫描、CCEC/CTPC diagnostics
+    和已消费契约共同编排，按参数传播顺序输出源码语句。
+```
+
+## 3.1 当前已验证 CTPC Case
+
+| CVE | 项目 | 类型 | baseline | CTPC 后结果 |
+|---|---|---|---|---|
+| CVE-2024-36039 | PyMySQL | propagation_gap | `finding=0` | `reported/finding=1`, `ctpc_fact_closed` |
+| CVE-2026-24486 | python-multipart | mixed_case | CCEC 后仍 `finding=0` | CCEC+CTPC 后 `reported/finding=1` |
+| CVE-2025-55156 | pyLoad | mixed_case | CCEC 后仍 `finding=0` | CCEC+CTPC 后 `reported/finding=1` |
+
+最新 CTPC 产物：
+
+```text
+LAPIS-Experiments/reports/pymysql-llm-auto-ctpc-latest/ctpc/ctpc/ctpc.json
+LAPIS-Experiments/reports/python-multipart-llm-auto-mixed-latest/ctpc/ctpc/ctpc.json
+LAPIS-Experiments/reports/pyload-llm-auto-mixed-latest/ctpc/ctpc/ctpc.json
+```
+
+复扫命令形态：
+
+```bash
+PYTHONPATH=LAPIS-Core/src python3 -m lapis run-yasa-case \
+  --tool-dir LAPIS-Tool \
+  --case LAPIS-Experiments/cases/propagation_gap/cve-2024-36039-pymysql/case.json \
+  --out-dir LAPIS-Experiments/reports/reproduce-pymysql/final-ctpc \
+  --uast-sdk-path /path/to/YASA-Engine-upstream/uast4py-linux-amd64 \
+  --label final-ctpc \
+  --timeout-seconds 180 \
+  --ctpc-file LAPIS-Experiments/reports/pymysql-llm-auto-ctpc-latest/ctpc/ctpc/ctpc.json
 ```
 
 ## 4. 断点定位
