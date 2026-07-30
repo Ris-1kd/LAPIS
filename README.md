@@ -23,6 +23,10 @@ docs/
 paper-experiments/
   Paper-facing table templates, metric definitions, and future aggregation
   scripts for final evaluation results.
+
+external-tools/
+  Local-only ignored directory for external baselines such as original YASA.
+  This directory is useful for experiments but is not committed.
 ```
 
 `YASA-Engine-upstream` remains the untouched baseline. LAPIS-specific YASA

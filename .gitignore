@@ -1,2 +1,3 @@
 .lapis-llm.env
 .env
+external-tools/YASA-Engine-upstream/
