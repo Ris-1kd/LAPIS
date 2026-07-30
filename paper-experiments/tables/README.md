@@ -11,6 +11,7 @@ report paths in appendix tables when possible.
 
 | File | Paper Table |
 |---|---|
+| `main-tables.md` | Markdown rendering of the five main paper tables |
 | `table1_dataset_statistics.csv` | Dataset statistics |
 | `table2_overall_detection_results.csv` | Overall detection results |
 | `table3_ablation_study.csv` | Component ablation |
