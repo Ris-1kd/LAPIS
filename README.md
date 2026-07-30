@@ -19,6 +19,10 @@ LAPIS-Tool/
 
 docs/
   Project-level methodology, dataset classification, and verification reports.
+
+paper-experiments/
+  Paper-facing table templates, metric definitions, and future aggregation
+  scripts for final evaluation results.
 ```
 
 `YASA-Engine-upstream` remains the untouched baseline. LAPIS-specific YASA
@@ -26,6 +30,10 @@ changes should be made in `LAPIS-Tool`, not in the upstream folder.
 
 See [docs/README.md](docs/README.md) for the organized LAPIS research
 documentation index.
+
+See [paper-experiments/README.md](paper-experiments/README.md) for paper
+experiment table templates. The current templates intentionally use `TBD`
+placeholders until the full dataset is collected.
 
 ## Reproduce One Experiment Case
 

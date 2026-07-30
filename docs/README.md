@@ -27,6 +27,12 @@ module READMEs and experiment outputs.
   records the current mixed-case closure results for python-multipart and
   pyLoad.
 
+## Experiment Design
+
+- [LAPIS Experiment Design](experiment/LAPIS_Experiment_Design.md)
+  records the paper-level RQ design and example table layout. Its numeric
+  tables are placeholders until the final benchmark collection is complete.
+
 ## Current Implementation Snapshot
 
 The current project is no longer only a repair proposal. The repository now
@@ -66,6 +72,14 @@ LAPIS-Tool/src/checker/taint/python/lapis-ctpc.ts
 Latest closed-loop experiment artifacts live under `LAPIS-Experiments/reports/`.
 The checked-in latest contracts are LLM-generated through the `llm-generate-*`
 commands, not manually copied oracle chains.
+
+## Paper Experiment Tables
+
+Paper-facing metric definitions and table templates are stored separately under
+[`paper-experiments/`](../paper-experiments/README.md). The tables there use
+`TBD` placeholders until the final CVE benchmark and real-world evaluation data
+are collected. Treat tables in `docs/experiment/LAPIS_Experiment_Design.md` as
+design examples only.
 
 Outdated or superseded draft reports are intentionally not kept here. Current
 experiment artifacts live under `LAPIS-Experiments/reports/`.

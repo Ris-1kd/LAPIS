@@ -1,0 +1,2 @@
+case_id,stage,model,base_url,prompt_path,raw_output_path,parsed_output_path,input_tokens,output_tokens,latency_seconds,status,notes
+TBD,TBD,TBD,TBD,TBD,TBD,TBD,TBD,TBD,TBD,TBD,TBD

@@ -1,0 +1,7 @@
+vulnerability_type,cwe,projects,cves,connectivity_gap,propagation_gap,mixed_gap,safe_or_control,notes
+SQL Injection,CWE-89,TBD,TBD,TBD,TBD,TBD,TBD,TBD
+Command Injection,CWE-78,TBD,TBD,TBD,TBD,TBD,TBD,TBD
+Path Traversal,CWE-22,TBD,TBD,TBD,TBD,TBD,TBD,TBD
+Deserialization,CWE-502,TBD,TBD,TBD,TBD,TBD,TBD,TBD
+Other,TBD,TBD,TBD,TBD,TBD,TBD,TBD,TBD
+Total,-,TBD,TBD,TBD,TBD,TBD,TBD,TBD
