@@ -31,10 +31,10 @@ The table templates follow the current experiment design:
 
 | RQ | Purpose | Main Tables |
 |---|---|---|
-| RQ1 | Known-CVE effectiveness and path recovery | Table 1, Table 2, Table 3 |
-| RQ2 | Component ablation | Table 4 |
-| RQ3 | LLM backend robustness | Table 5 |
-| RQ4 | Real-world project evaluation | Table 6 |
+| RQ1 | Known-CVE effectiveness and path recovery | Table 1, Table 2 |
+| RQ2 | Component ablation | Table 3 |
+| RQ3 | LLM backend robustness | Table 4 |
+| RQ4 | Real-world project evaluation | Table 5 |
 
 ## Data Policy
 
