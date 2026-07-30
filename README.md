@@ -16,10 +16,16 @@ LAPIS-Experiments/
 LAPIS-Tool/
   LAPIS-modified YASA tool tree. This is where CTPC loading, guarded
   access-path propagation, and YASA-in-the-loop validation hooks will be added.
+
+docs/
+  Project-level methodology, dataset classification, and verification reports.
 ```
 
 `YASA-Engine-upstream` remains the untouched baseline. LAPIS-specific YASA
 changes should be made in `LAPIS-Tool`, not in the upstream folder.
+
+See [docs/README.md](docs/README.md) for the organized LAPIS research
+documentation index.
 
 ## Reproduce One Experiment Case
 
