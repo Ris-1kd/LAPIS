@@ -1,0 +1,55 @@
+version: 2
+updates:
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "ci/cd"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    # This groups all action updates into one PR
+    groups:
+      all-actions:
+        patterns:
+          - "*"
+
+  # Python dependencies via pip
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      dev-dependencies:
+        patterns:
+          - "pytest*"
+          - "mypy*"
+          - "ruff*"
+          - "pre-commit*"
+          - "types-*"
+          - "ipykernel*"
+          - "python-semantic-release*"
+          - "rich"
+      test-dependencies:
+        patterns:
+          - "pytest*"
+          - "coverage*"
+          - "hypothesis*"
+      llm-clients:
+        patterns:
+          - "openai*"
+          - "mistralai*"
+          - "google-*"
+          - "ollama*"
+          - "ibm-watsonx-ai*"
