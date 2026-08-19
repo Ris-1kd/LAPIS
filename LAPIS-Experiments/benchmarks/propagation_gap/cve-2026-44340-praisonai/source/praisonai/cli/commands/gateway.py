@@ -1,0 +1,425 @@
+"""
+Gateway command group for PraisonAI CLI.
+
+Provides commands for managing the WebSocket gateway with multi-bot support.
+"""
+
+from typing import Optional
+
+import typer
+
+app = typer.Typer(
+    help="Manage the PraisonAI Gateway server",
+    no_args_is_help=True,
+)
+
+
+@app.command("start")
+def gateway_start(
+    host: str = typer.Option("127.0.0.1", "--host", help="Host to bind to"),
+    port: int = typer.Option(8765, "--port", help="Port to listen on"),
+    agents: Optional[str] = typer.Option(None, "--agents", help="Path to agent configuration file"),
+    config: Optional[str] = typer.Option(None, "--config", help="Path to gateway.yaml for multi-bot mode"),
+):
+    """Start the gateway server.
+
+    Examples:
+        praisonai gateway start
+        praisonai gateway start --config gateway.yaml
+        praisonai gateway start --agents agents.yaml --port 9000
+    """
+    from ..features.gateway import GatewayHandler
+
+    handler = GatewayHandler()
+    handler.start(host=host, port=port, agent_file=agents, config_file=config)
+
+
+@app.command("status")
+def gateway_status(
+    host: str = typer.Option("127.0.0.1", "--host", help="Gateway host"),
+    port: int = typer.Option(8765, "--port", help="Gateway port"),
+    daemon_only: bool = typer.Option(False, "--daemon-only", help="Show only daemon status"),
+):
+    """Check gateway status and daemon service status.
+
+    Examples:
+        praisonai gateway status
+        praisonai gateway status --port 9000
+        praisonai gateway status --daemon-only
+    """
+    from ..features.gateway import GatewayHandler
+    from praisonai.daemon import get_daemon_status
+    from ..output.console import get_output_controller
+    
+    output = get_output_controller()
+    
+    # Show daemon status
+    try:
+        daemon_status = get_daemon_status()
+        platform = daemon_status.get("platform", "unknown")
+        installed = daemon_status.get("installed", False)
+        running = daemon_status.get("running", False)
+        
+        if installed:
+            if running:
+                output.print_success(f"Daemon service: Running ({platform})")
+            else:
+                output.print_warning(f"Daemon service: Installed but not running ({platform})")
+        else:
+            output.print_info(f"Daemon service: Not installed ({platform})")
+            
+        if daemon_status.get("pid"):
+            output.print_info(f"Process ID: {daemon_status['pid']}")
+        if daemon_status.get("error"):
+            output.print_warning(f"Daemon error: {daemon_status['error']}")
+            
+    except Exception as e:
+        output.print_error(f"Error checking daemon status: {str(e)}")
+    
+    # Show gateway server status if not daemon-only
+    if not daemon_only:
+        try:
+            handler = GatewayHandler()
+            handler.status(host=host, port=port)
+        except Exception as e:
+            output.print_error(f"Error checking gateway server status: {str(e)}")
+
+
+@app.command("channels")
+def gateway_channels(
+    config: str = typer.Option("gateway.yaml", "--config", "-c", help="Path to gateway.yaml"),
+    json_output: bool = typer.Option(False, "--json", help="Output JSON"),
+):
+    """List channels configured in a gateway.yaml file.
+
+    Examples:
+        praisonai gateway channels
+        praisonai gateway channels --config my-gateway.yaml --json
+    """
+    import os
+    import yaml
+
+    if not os.path.exists(config):
+        print(f"Error: Config file not found: {config}")
+        raise typer.Exit(1)
+
+    with open(config) as f:
+        cfg = yaml.safe_load(f) or {}
+
+    channels = cfg.get("channels", {})
+
+    if not channels:
+        print("No channels configured.")
+        raise typer.Exit(0)
+
+    if json_output:
+        import json
+        print(json.dumps(channels, indent=2))
+        raise typer.Exit(0)
+
+    try:
+        from rich.table import Table
+        from rich.console import Console
+
+        console = Console()
+        table = Table(title="Configured Channels")
+        table.add_column("Name", style="cyan")
+        table.add_column("Platform", style="green")
+        table.add_column("Token", style="yellow")
+        table.add_column("Config Keys", style="dim")
+
+        for name, ch_cfg in channels.items():
+            platform = ch_cfg.get("platform", "unknown")
+            token_val = ch_cfg.get("token", "")
+            has_token = "✅ set" if token_val else "❌ missing"
+            keys = ", ".join(
+                k for k in ch_cfg.keys() if k not in ("platform", "token")
+            )
+            table.add_row(name, platform, has_token, keys or "—")
+
+        console.print(table)
+    except ImportError:
+        print(f"{'Name':<20} {'Platform':<12} {'Token':<12}")
+        print("-" * 44)
+        for name, ch_cfg in channels.items():
+            platform = ch_cfg.get("platform", "unknown")
+            has_token = "set" if ch_cfg.get("token") else "missing"
+            print(f"{name:<20} {platform:<12} {has_token:<12}")
+
+
+@app.command("install")
+def gateway_install(
+    config: str = typer.Option(
+        "bot.yaml", "--config",
+        help="Path to bot.yaml (defaults to ./bot.yaml → ~/.praisonai/bot.yaml)",
+    ),
+    start: bool = typer.Option(True, "--start/--no-start", help="Start after install"),
+):
+    """Install the gateway as an OS daemon (LaunchAgent / systemd).
+    
+    Examples:
+        praisonai gateway install
+        praisonai gateway install --config my-bot.yaml --no-start
+    """
+    from praisonai.daemon import install_daemon
+    from .._paths import resolve_bot_config_path
+    from ..output.console import get_output_controller
+    
+    output = get_output_controller()
+    config = resolve_bot_config_path(config)
+    
+    try:
+        result = install_daemon(config_path=config)
+        if result.get("ok"):
+            output.print_success(result.get("message", "Service installed successfully"))
+            if start:
+                output.print_info("Starting the service...")
+                from praisonai.daemon import get_daemon_status
+                status = get_daemon_status()
+                if status.get("running"):
+                    output.print_success("Service is now running")
+                else:
+                    output.print_warning("Service installed but not running. Check system logs.")
+        else:
+            error = result.get("error", "Installation failed")
+            output.print_error(f"Installation failed: {error}")
+            raise typer.Exit(1)
+    except Exception as e:
+        output.print_error(f"Installation error: {str(e)}")
+        raise typer.Exit(1)
+
+
+@app.command("uninstall")
+def gateway_uninstall():
+    """Uninstall the gateway daemon service.
+    
+    Examples:
+        praisonai gateway uninstall
+    """
+    from praisonai.daemon import uninstall_daemon
+    from ..output.console import get_output_controller
+    
+    output = get_output_controller()
+    
+    try:
+        result = uninstall_daemon()
+        if result.get("ok"):
+            output.print_success(result.get("message", "Service uninstalled successfully"))
+        else:
+            error = result.get("error", "Uninstallation failed")
+            output.print_error(f"Uninstallation failed: {error}")
+            raise typer.Exit(1)
+    except Exception as e:
+        output.print_error(f"Uninstallation error: {str(e)}")
+        raise typer.Exit(1)
+
+
+@app.command("mint-link")
+def gateway_mint_link(
+    ttl: int = typer.Option(600, "--ttl", help="Time-to-live in seconds (default: 600 = 10 minutes)"),
+    host: str = typer.Option("127.0.0.1", "--host", help="Gateway host"),
+    port: int = typer.Option(8765, "--port", help="Gateway port"),
+):
+    """Generate a fresh magic link for gateway authentication.
+    
+    Magic links provide one-click authentication without needing to
+    copy/paste tokens. Links expire after the specified TTL and can
+    only be used once.
+    
+    Examples:
+        praisonai gateway mint-link
+        praisonai gateway mint-link --ttl 300  # 5 minutes
+        praisonai gateway mint-link --port 9000
+    """
+    from ..commands.mint_link import mint_fresh_link
+    from ..output.console import get_output_controller
+    import os
+    
+    output = get_output_controller()
+    
+    try:
+        # Set environment for host/port override
+        os.environ["GATEWAY_HOST"] = host
+        os.environ["GATEWAY_PORT"] = str(port)
+        
+        magic_url = mint_fresh_link(ttl=ttl)
+        
+        output.print_success("Magic link generated:")
+        print(f"\n{magic_url}\n")
+        output.print_info(f"Expires in {ttl} seconds ({ttl//60} minutes)")
+        output.print_info("Link saved to ~/.praisonai/last-link.txt")
+        
+    except Exception as e:
+        output.print_error(f"Failed to generate magic link: {str(e)}")
+        raise typer.Exit(1)
+
+
+@app.command("logs")
+def gateway_logs(
+    lines: int = typer.Option(50, "-n", help="Number of log lines to show"),
+):
+    """Show daemon service logs.
+    
+    Examples:
+        praisonai gateway logs
+        praisonai gateway logs -n 100
+    """
+    from praisonai.daemon import _detect_platform
+    from ..output.console import get_output_controller
+    import subprocess
+    import sys
+    
+    output = get_output_controller()
+    plat = _detect_platform()
+    
+    try:
+        if plat == "systemd":
+            from praisonai.daemon.systemd import get_logs
+            logs = get_logs(lines=lines)
+            if logs:
+                print(logs)
+            else:
+                output.print_warning("No logs found or service not installed")
+        elif plat == "launchd":
+            from praisonai.daemon.launchd import get_logs
+            logs = get_logs(lines=lines)
+            if logs:
+                print(logs)
+            else:
+                output.print_warning("No logs found or service not installed")
+        elif plat == "windows":
+            from praisonai.daemon.windows import get_logs
+            logs = get_logs(lines=lines)
+            if logs:
+                print(logs)
+            else:
+                output.print_warning("No logs found")
+        else:
+            output.print_error(f"Unsupported platform: {plat}")
+            raise typer.Exit(1)
+    except Exception as e:
+        output.print_error(f"Error reading logs: {str(e)}")
+        raise typer.Exit(1)
+
+
+@app.command("send")
+def gateway_send(
+    config: str = typer.Option("gateway.yaml", "--config", "-c", help="Path to gateway.yaml"),
+    channel: str = typer.Option(..., "--channel", help="Channel name from config (e.g. 'telegram')"),
+    channel_id: str = typer.Option(..., "--channel-id", help="Target chat/channel ID"),
+    message: str = typer.Option(..., "--message", "-m", help="Message text to send"),
+    thread_id: Optional[str] = typer.Option(None, "--thread-id", help="Optional thread ID"),
+):
+    """Send a one-shot test message to a channel bot.
+
+    Instantiates the bot from gateway.yaml config, sends the message, then exits.
+    Useful for testing scheduled delivery targets.
+
+    Examples:
+        praisonai gateway send --config gateway.yaml --channel telegram --channel-id 12345 -m "Hello"
+    """
+    import os
+    import asyncio
+    import yaml
+
+    if not os.path.exists(config):
+        print(f"Error: Config file not found: {config}")
+        raise typer.Exit(1)
+
+    with open(config) as f:
+        cfg = yaml.safe_load(f) or {}
+
+    channels_cfg = cfg.get("channels", {})
+    ch_cfg = channels_cfg.get(channel)
+
+    if not ch_cfg:
+        available = ", ".join(channels_cfg.keys()) if channels_cfg else "(none)"
+        print(f"Error: Channel '{channel}' not found in config. Available: {available}")
+        raise typer.Exit(1)
+
+    platform = ch_cfg.get("platform", channel)
+    token = ch_cfg.get("token", "")
+
+    # Resolve env vars in token
+    if token and token.startswith("${") and token.endswith("}"):
+        env_var = token[2:-1]
+        token = os.environ.get(env_var, "")
+        if not token:
+            print(f"Error: Environment variable {env_var} not set")
+            raise typer.Exit(1)
+
+    async def _send():
+        try:
+            from praisonai.gateway.server import WebSocketGateway
+            bot = WebSocketGateway._create_bot(channel, ch_cfg)
+        except Exception as e:
+            print(f"Error creating bot: {e}")
+            raise typer.Exit(1)
+
+        try:
+            await bot.start()
+            await asyncio.sleep(1)  # Let bot initialise
+            result = await bot.send_message(
+                channel_id, message, thread_id=thread_id,
+            )
+            print(f"✅ Message sent to {channel}:{channel_id}")
+            if hasattr(result, "message_id"):
+                print(f"   Message ID: {result.message_id}")
+        except Exception as e:
+            print(f"❌ Send failed: {e}")
+            raise typer.Exit(1)
+        finally:
+            try:
+                await bot.stop()
+            except Exception:
+                pass
+
+    try:
+        asyncio.run(_send())
+    except typer.Exit:
+        raise
+    except Exception as e:
+        print(f"Error: {e}")
+        raise typer.Exit(1)
+
+
+@app.callback(invoke_without_command=True)
+def gateway_callback(ctx: typer.Context):
+    """Show gateway help if no subcommand provided."""
+    if ctx.invoked_subcommand is None:
+        help_text = """
+[bold cyan]PraisonAI Gateway - Multi-Bot WebSocket Server[/bold cyan]
+
+Manage the gateway server: praisonai gateway <command>
+
+[bold]Commands:[/bold]
+  [green]start[/green]       Start the gateway server
+  [green]status[/green]      Check gateway and daemon status
+  [green]channels[/green]    List channels from gateway.yaml
+  [green]send[/green]        Send a test message to a channel
+  [green]install[/green]     Install as OS daemon service
+  [green]uninstall[/green]   Uninstall daemon service
+  [green]logs[/green]        Show daemon service logs
+  [green]mint-link[/green]   Generate a one-time magic link (options: --ttl, --host, --port)
+
+[bold]Multi-Bot Mode:[/bold]
+  praisonai gateway start --config gateway.yaml
+
+[bold]Standard Mode:[/bold]
+  praisonai gateway start
+  praisonai gateway start --agents agents.yaml --port 9000
+
+[bold]Check Status:[/bold]
+  praisonai gateway status
+
+[bold]Channel Management:[/bold]
+  praisonai gateway channels --config gateway.yaml
+  praisonai gateway send --config gateway.yaml --channel telegram --channel-id 12345 -m "test"
+"""
+        try:
+            from rich import print as rprint
+            rprint(help_text)
+        except ImportError:
+            import re
+            plain = re.sub(r'\\[/?[^\\]]+\\]', '', help_text)
+            print(plain)
