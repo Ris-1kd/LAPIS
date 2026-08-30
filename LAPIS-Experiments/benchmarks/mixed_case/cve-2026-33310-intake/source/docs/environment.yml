@@ -1,0 +1,27 @@
+name: intake-docs
+channels:
+  - conda-forge
+
+dependencies:
+  - appdirs
+  - python=3.12
+  - dask
+  - numpy
+  - pandas
+  - msgpack-python
+  - msgpack-numpy
+  - requests
+  - tornado
+  - jinja2
+  - python-snappy
+  - pyyaml
+  - hvplot
+  - platformdirs
+  - panel
+  - bokeh
+  - docutils
+  - sphinx
+  - sphinx_rtd_theme
+  - numpydoc
+  - entrypoints
+  - aiohttp

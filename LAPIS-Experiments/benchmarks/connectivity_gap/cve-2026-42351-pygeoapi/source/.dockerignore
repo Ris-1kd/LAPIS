@@ -1,0 +1,9 @@
+.git
+.github
+.pytest_cache
+.mypy_cache
+build
+dist
+docs
+pygeoapi.egg-info
+

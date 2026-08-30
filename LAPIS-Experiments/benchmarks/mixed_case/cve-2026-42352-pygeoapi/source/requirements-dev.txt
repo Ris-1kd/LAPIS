@@ -1,0 +1,32 @@
+# Flask-based CORS setup
+flask_cors
+
+# testing
+pytest
+pytest-cov
+pytest-env
+coverage
+pyld
+
+# Testing with mock Starlette client
+starlette
+uvicorn[standard]
+httpx
+
+# Pydantic/Dataclasses models
+polyfactory
+
+# PEP8
+flake8
+
+# packaging/PyPI
+twine
+wheel
+
+# the packages below are used to handle HTTP/SSL
+# errors when uploading to PyPI (https://github.com/pypa/twine/issues/273)
+pyOpenSSL
+ndg-httpsclient
+pyasn1
+
+pre-commit

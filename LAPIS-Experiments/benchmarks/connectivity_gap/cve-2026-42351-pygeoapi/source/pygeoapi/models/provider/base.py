@@ -1,0 +1,256 @@
+# =================================================================
+#
+# Authors: Antonio Cerciello <anto.nio.cerciello@gmail.com>
+#          Francesco Bartoli <xbartolone@gmail.com>
+#          Tom Kralidis <tomkralidis@gmail.com>
+#
+# Copyright (c) 2022 Antonio Cerciello
+# Copyright (c) 2025 Francesco Bartoli
+# Copyright (c) 2025 Tom Kralidis
+#
+# Permission is hereby granted, free of charge, to any person
+# obtaining a copy of this software and associated documentation
+# files (the "Software"), to deal in the Software without
+# restriction, including without limitation the rights to use,
+# copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following
+# conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+# OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+# OTHER DEALINGS IN THE SOFTWARE.
+#
+# =================================================================
+
+from datetime import datetime
+from enum import Enum
+import json
+from pathlib import Path
+from typing import List, Optional
+
+import pydantic
+from pydantic import BaseModel
+
+from pygeoapi.util import DEFINITIONSDIR
+
+TMS_DIR = DEFINITIONSDIR / 'tiles'
+
+
+class TilesMetadataFormat(str, Enum):
+    # Tile Set Metadata
+    JSON = "JSON"
+    JSONLD = "JSONLD"
+    # TileJSON 3.0
+    TILEJSON = "TILEJSON"
+    # HTML (default)
+    HTML = "HTML"
+
+
+# Tile Set Metadata Enums
+class AccessConstraintsEnum(str, Enum):
+    UNCLASSIFIED = "unclassified"
+    RESTRICTED = "restricted"
+    CONFIDENTIAL = "confidential"
+    SECRET = "secret"
+    TOPSECRET = "topSecret"
+
+
+class DataTypeEnum(str, Enum):
+    MAP = "map"
+    VECTOR = "vector"
+    COVERAGE = "coverage"
+
+
+class GeometryDimensionEnum(int, Enum):
+    POINTS = 0
+    CURVES = 1
+    SURFACES = 2
+    SOLIDS = 3
+
+
+class TileMatrixSetEnumType(BaseModel):
+    tileMatrixSet: str
+    tileMatrixSetURI: str
+    crs: str
+    title: str
+    orderedAxes: List[str]
+    wellKnownScaleSet: str
+    tileMatrices: List[dict]
+
+
+class TileMatrixSetLoader:
+    def __init__(self, directory: Path):
+        self.directory = directory
+
+    def load_from_file(self, filename: str) -> TileMatrixSetEnumType:
+        """
+        Load a single TMS JSON file.
+
+        :param filename: filename of TMS
+
+        :returns: `TileMatrixSetEnumType` of TMS
+        """
+
+        filepath = self.directory / filename
+
+        with filepath.open(encoding='utf-8') as fh:
+            data = json.load(fh)
+
+        return TileMatrixSetEnumType(
+            tileMatrixSet=data["id"],
+            tileMatrixSetURI=data["uri"],
+            crs=data["crs"],
+            title=data["title"],
+            orderedAxes=data["orderedAxes"],
+            wellKnownScaleSet=data.get("wellKnownScaleSet", ""),
+            tileMatrices=data["tileMatrices"]
+        )
+
+    def create_enum(self) -> Enum:
+        """
+        Create an Enum with all TileMatrixSets in the directory.
+
+        :returns: `Enum` of `TileMatrixSetEnum`
+        """
+
+        members = {}
+        for filepath in self.directory.glob("*.json"):
+            tms = self.load_from_file(filepath.name)
+            enum_name = tms.tileMatrixSet.upper().replace("-", "").replace(" ", "")  # noqa
+            members[enum_name] = tms
+
+        return Enum("TileMatrixSetEnum", members)
+
+
+tms_loader = TileMatrixSetLoader(TMS_DIR)
+TileMatrixSetEnum = tms_loader.create_enum()
+
+
+# Tile Set Metadata Sub Types
+class TileMatrixLimitsType(BaseModel):
+    tileMatrix: str
+    minTileRow: int
+    maxTileRow: int
+    minTileCol: int
+    maxTileCol: int
+
+
+class TwoDBoundingBoxType(BaseModel):
+    lowerLeft: List[float]
+    upperRight: List[float]
+    crs: Optional[str] = None
+
+
+class LinkType(BaseModel):
+    href: str
+    rel: Optional[str] = None
+    type_: Optional[str] = None
+    hreflang: Optional[str] = None
+    title: Optional[str] = None
+    length: Optional[int] = None
+
+
+class GeospatialDataType(BaseModel):
+    id: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+    keywords: Optional[List[str]] = None
+    dataType: DataTypeEnum = DataTypeEnum.VECTOR
+    geometryDimension: Optional[GeometryDimensionEnum] = None
+    maxTileMatrix: Optional[str] = None
+    minTileMatrix: Optional[str] = None
+    minScaleDenominator: Optional[float] = None
+    maxScaleDenominator: Optional[float] = None
+    minCellSize: Optional[float] = None
+    maxCellSize: Optional[float] = None
+    boundingBox: Optional[TwoDBoundingBoxType] = None
+    links: Optional[LinkType] = None
+    propertiesSchema: Optional[dict] = None
+
+
+class StyleType(BaseModel):
+    id: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+    keywords: Optional[List[str]] = None
+    links: Optional[LinkType] = None
+
+
+class TilePointType(BaseModel):
+    crs: str
+    coordinates: Optional[List[float]] = None
+    scaleDenominator: Optional[float] = None
+    cellSize: Optional[float] = None
+    # CodeType as adaptation of MD_Identifier class ISO 19115
+    tileMatrix: str
+    cellSize: Optional[str] = None
+
+
+class TileSetMetadata(BaseModel):
+    # A title for this tileset
+    title: Optional[str] = None
+    # Brief narrative description of this tile set
+    description: Optional[str] = None
+    # keywords about this tileset
+    keywords: Optional[List[str]] = None
+    # Version of the Tile Set. Changes if the data behind the tiles
+    # has been changed
+    version: Optional[str] = None
+    # Useful information to contact the authors or custodians for the Tile Set
+    pointOfContact: Optional[str] = None
+    # Short reference to recognize the author or provider
+    attribution: Optional[str] = None
+    # License applicable to the tiles
+    license_: Optional[str] = None
+    # Restrictions on the availability of the Tile Set that the user needs to
+    # be aware of before using or redistributing the Tile Set
+    accessConstraints: Optional[AccessConstraintsEnum] = AccessConstraintsEnum.UNCLASSIFIED  # noqa
+    # Media types available for the tiles
+    mediaTypes:  Optional[List[str]] = None
+    # Type of data represented in the tileset
+    dataType: DataTypeEnum = DataTypeEnum.VECTOR
+    # Limits for the TileRow and TileCol values for each TileMatrix in the
+    # tileMatrixSet. If missing, there are no limits other that the ones
+    # imposed by the TileMatrixSet. If present the TileMatrices listed are
+    # limited and the rest not available at all
+    tileMatrixSetLimits: Optional[TileMatrixLimitsType] = None
+    # Coordinate Reference System (CRS)
+    crs: Optional[str] = None
+    # Epoch of the Coordinate Reference System (CRS)
+    epoch: Optional[int] = None
+    # Minimum bounding rectangle surrounding the tile matrix set, in the
+    # supported CRS
+    boundingBox: Optional[TwoDBoundingBoxType] = None
+    # When the Tile Set was first produced
+    created: Optional[datetime] = None
+    # Last Tile Set change/revision
+    updated: Optional[datetime] = None
+    layers: Optional[GeospatialDataType] = None
+    # Style involving all layers used to generate the tileset
+    style: Optional[StyleType] = None
+    # Location of a tile that nicely represents the tileset.
+    # Implementations may use this center value to set the default location
+    # or to present a representative tile in a user interface
+    centerPoint: Optional[TilePointType] = None
+    # Tile matrix set definition
+    tileMatrixSet: Optional[str] = None
+    # Reference to a Tile Matrix Set on an official source
+    tileMatrixSetURI: Optional[str] = None
+    # Links to related resources.
+    links: Optional[List[LinkType]] = None
+
+
+if pydantic.VERSION.startswith('1'):
+    def _dump(self, *, exclude_none: bool = False, **kwargs):
+        return self.dict(exclude_none=exclude_none, **kwargs)
+
+    TileSetMetadata.model_dump = _dump
