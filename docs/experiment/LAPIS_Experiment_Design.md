@@ -228,11 +228,11 @@ Re-analysis
 ## LLM模型
 
 
-| Model    | Description |
-| -------- | ----------- |
-| GPT      | 高能力闭源模型     |
-| Gemini   | 不同厂商闭源模型    |
-| DeepSeek | 低成本推理模型     |
+| Model             | Description |
+| ----------------- | ----------- |
+| GPT-5             | OpenAI 高能力闭源模型 |
+| Claude Opus 5     | Anthropic 高能力闭源模型 |
+| DeepSeek V4 Flash | DeepSeek 低延迟、低成本模型 |
 
 
 ---
@@ -264,9 +264,9 @@ Re-analysis
 
 | Model | Contract Accuracy | Triple Pass | Path Recovery | Cost |
 |---|---:|---:|---:|---:|
-| GPT|||||
-| Gemini|||||
-| DeepSeek|||||
+| GPT-5|||||
+| Claude Opus 5|||||
+| DeepSeek V4 Flash|||||
 
 
 ---
